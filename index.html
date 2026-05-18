@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Guionista - Editor de Guiones</title>
+<title>Guionista — Editor de Guiones</title>
 
 <!-- Firebase SDK (compat) -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -1088,44 +1088,91 @@ function repaginate() {
 function showAuthModal() { $('auth-modal').classList.add('open'); }
 function hideAuthModal() { $('auth-modal').classList.remove('open'); }
 
-async function doSignInGoogle() {
-  if (!FB_READY || !auth) {
-    const errEl = $('auth-error');
-    errEl.textContent = 'Firebase no esta listo. Recarga la pagina o comprueba tu conexion.';
-    errEl.classList.add('show');
-    return;
-  }
-  const provider = new firebase.auth.GoogleAuthProvider();
+/* Errores de popup que justifican intentar redirect en su lugar */
+const POPUP_FALLBACK_CODES = new Set([
+  'auth/operation-not-supported-in-this-environment',
+  'auth/popup-blocked',
+]);
+
+/* Errores donde el usuario simplemente cerro/cancelo el popup — no es un error real */
+const POPUP_CANCEL_CODES = new Set([
+  'auth/popup-closed-by-user',
+  'auth/cancelled-popup-request',
+]);
+
+async function signInWithProvider(provider, btnId) {
   const errEl = $('auth-error');
+  const btn   = $(btnId);
   errEl.classList.remove('show');
+
+  /* Estado de carga en el boton */
+  const origHTML    = btn.innerHTML;
+  btn.disabled      = true;
+  btn.style.opacity = '0.6';
+  btn.textContent   = 'Conectando...';
+
+  const restoreBtn = () => {
+    btn.disabled      = false;
+    btn.style.opacity = '';
+    btn.innerHTML     = origHTML;
+  };
+
   try {
-    /* signInWithRedirect funciona en file:// y en entornos sin soporte de popups.
-       La pagina se redirige a Google y vuelve; el resultado se captura en init(). */
-    await auth.signInWithRedirect(provider);
-  } catch(e) {
-    errEl.textContent = tradAuthError(e.code);
+    /* 1. Intentar popup (no recarga la pagina, mejor UX) */
+    await auth.signInWithPopup(provider);
+    hideAuthModal();
+    restoreBtn();
+    return;
+  } catch(popupErr) {
+
+    if (POPUP_CANCEL_CODES.has(popupErr.code)) {
+      /* Usuario cerro la ventana — no es error, solo restaurar */
+      restoreBtn();
+      return;
+    }
+
+    if (POPUP_FALLBACK_CODES.has(popupErr.code)) {
+      /* 2. Popup no disponible en este entorno → intentar redirect */
+      try {
+        /* signInWithRedirect redirige la pagina; no hay return */
+        await auth.signInWithRedirect(provider);
+        return; /* La pagina se redirige; no se ejecuta nada mas */
+      } catch(redirErr) {
+        restoreBtn();
+        errEl.textContent = tradAuthError(redirErr.code);
+        errEl.classList.add('show');
+        return;
+      }
+    }
+
+    /* Cualquier otro error de Firebase */
+    restoreBtn();
+    errEl.textContent = tradAuthError(popupErr.code);
     errEl.classList.add('show');
   }
 }
 
+async function doSignInGoogle() {
+  if (!FB_READY || !auth) {
+    $('auth-error').textContent = 'Firebase no esta listo. Recarga la pagina.';
+    $('auth-error').classList.add('show');
+    return;
+  }
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  await signInWithProvider(provider, 'btn-google');
+}
+
 async function doSignInApple() {
   if (!FB_READY || !auth) {
-    const errEl = $('auth-error');
-    errEl.textContent = 'Firebase no esta listo. Recarga la pagina o comprueba tu conexion.';
-    errEl.classList.add('show');
+    $('auth-error').textContent = 'Firebase no esta listo. Recarga la pagina.';
+    $('auth-error').classList.add('show');
     return;
   }
   const provider = new firebase.auth.OAuthProvider('apple.com');
   provider.addScope('email');
   provider.addScope('name');
-  const errEl = $('auth-error');
-  errEl.classList.remove('show');
-  try {
-    await auth.signInWithRedirect(provider);
-  } catch(e) {
-    errEl.textContent = tradAuthError(e.code);
-    errEl.classList.add('show');
-  }
+  await signInWithProvider(provider, 'btn-apple');
 }
 
 function tradAuthError(code) {
@@ -2559,16 +2606,25 @@ function init() {
   }
 
   if (FB_READY) {
-    /* Captura el resultado de signInWithRedirect al volver de Google/Apple */
-    auth.getRedirectResult().then(result => {
-      if (result && result.user) {
-        hideAuthModal();
-      }
-    }).catch(e => {
-      if (e.code && e.code !== 'auth/no-auth-event') {
+    /* Captura el resultado de signInWithRedirect al volver de Google/Apple.
+       onAuthStateChanged se dispara solo cuando hay sesion activa;
+       getRedirectResult ademas captura errores del flujo de redirect. */
+    auth.getRedirectResult()
+      .then(result => {
+        if (result && result.user) hideAuthModal();
+      })
+      .catch(e => {
+        /* Ignorar "no habia redirect pendiente" */
+        if (!e.code || e.code === 'auth/no-auth-event') return;
+        /* Mostrar el error en el modal si esta abierto, si no en consola */
+        const errEl = $('auth-error');
+        if (errEl) {
+          errEl.textContent = tradAuthError(e.code);
+          errEl.classList.add('show');
+          showAuthModal();
+        }
         console.warn('getRedirectResult error:', e.code, e.message);
-      }
-    });
+      });
 
     auth.onAuthStateChanged(onAuthStateChanged);
   } else {
