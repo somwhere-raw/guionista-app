@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Editor de Guiones — WGA</title>
+<title>Editor de Guiones</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-<script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital@0;1&family=Courier+Prime&display=swap');
 
@@ -364,7 +364,7 @@ select.tipo-sel:focus{outline:none;}
      HEADER
      =========================================================== -->
 <header id="hdr">
-  <span class="logo">Editor de Guiones &mdash; WGA</span>
+  <span class="logo">Editor de Guiones</span>
 
   <div class="hgrp">
     <button class="hb" onclick="nuevoGuion()">Nuevo</button>
@@ -687,7 +687,10 @@ function insertarTipo(tipo) {
    ============================================================ */
 function alturaUtil(pag) {
   const cs = getComputedStyle(pag);
-  return pag.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  // Buffer de 2 líneas (~38px) para que nunca se escriba hasta el borde inferior
+  const lineH = parseFloat(getComputedStyle(pag.querySelector('.bl') || pag).fontSize || 16) * 1.2;
+  const buf   = Math.ceil(lineH * 2);
+  return pag.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - buf;
 }
 
 function chkOverflow(blActivo) {
@@ -973,18 +976,27 @@ async function _docx() {
   // Configuracion por formato
   // Letter WGA: 1.5" izq, 1" der, 1" top, 1" bot
   // A4 WGA equivalente: ~1.38" izq (3.5cm), ~0.98" der (2.5cm), ~0.98" top/bot
+  // ─── Medidas exactas derivadas del CSS (96 dpi) ─────────────────────────────
+  // Letter : pagina 816×1056px  → pad izq=144px(1.5"), der=96px(1"), top/bot=96px(1")
+  //   personaje  margin-left:211px → 211/96 = 2.198" desde margen izq
+  //   dialogo    margin-left:96px  → 1.0"  |  margin-right:96px → 1.0" desde margen der
+  //   acotacion  margin-left:154px → 1.604" |  margin-right:96px → 1.0"
+  // A4      : pagina 794×1123px  → pad izq=134px(1.396"), der=96px(1"), top/bot=96px(1")
+  //   personaje  margin-left:186px → 186/96 = 1.9375"
+  //   dialogo / acotacion : mismos px que letter → mismos valores en twips
+  // ─────────────────────────────────────────────────────────────────────────────
   const C = formato === 'a4' ? {
-    pw: tw(8.27), ph: tw(11.69),
-    ml: tw(1.38), mr: tw(0.98), mt: tw(0.98), mb: tw(0.98),
-    iPersonaje: tw(2.0),
-    iDialL: tw(1.0), iDialR: tw(1.4),
-    iParL:  tw(1.5), iParR:  tw(1.4),
+    pw: tw(8.27),        ph: tw(11.69),
+    ml: tw(134/96),      mr: tw(1.0), mt: tw(1.0), mb: tw(1.0),
+    iPersonaje: tw(186/96),
+    iDialL: tw(1.0),     iDialR: tw(1.0),
+    iParL:  tw(154/96),  iParR:  tw(1.0),
   } : {
-    pw: tw(8.5),  ph: tw(11),
-    ml: tw(1.5),  mr: tw(1.0), mt: tw(1.0), mb: tw(1.0),
-    iPersonaje: tw(2.2),
-    iDialL: tw(1.0), iDialR: tw(1.5),
-    iParL:  tw(1.6), iParR:  tw(1.5),
+    pw: tw(8.5),         ph: tw(11),
+    ml: tw(1.5),         mr: tw(1.0), mt: tw(1.0), mb: tw(1.0),
+    iPersonaje: tw(211/96),
+    iDialL: tw(1.0),     iDialR: tw(1.0),
+    iParL:  tw(154/96),  iParR:  tw(1.0),
   };
 
   const propPag = {
@@ -1000,27 +1012,35 @@ async function _docx() {
     p.querySelectorAll('.bl').forEach(b => bls.push({t:b.dataset.t, tx:b.textContent}));
   });
 
+  // Interlineado exacto: 12pt × 1.2 = 14.4pt = 288 twips  (igual que CSS line-height:1.2)
+  // Espaciado antes de bloque: CSS margin-top:1.2em = 14.4pt = 288 twips
+  const LINE = 288;          // twips — interlineado exacto, igual que CSS
+  const SPC  = LINE;         // twips — espacio antes de escena/personaje/transicion
+
   // Construir parrafos
   const parrs = bls.map(b => {
-    const up = ['escena','personaje','transicion'].includes(b.t);
+    const up  = ['escena','personaje','transicion'].includes(b.t);
     const txt = up ? b.tx.toUpperCase() : b.tx;
     const run = new TextRun({ text: txt, font: 'Courier New', size: 24 });
 
+    const sp0  = { before: 0,   after: 0, line: LINE, lineRule: 'exact' };
+    const spSpc = { before: SPC, after: 0, line: LINE, lineRule: 'exact' };
+
     switch(b.t) {
       case 'escena':
-        return new Paragraph({ children:[run], spacing:{before:tw(0.166),after:0,line:240,lineRule:'auto'}, indent:{left:0,right:0}, alignment:AlignmentType.LEFT });
+        return new Paragraph({ children:[run], spacing: spSpc, indent:{left:0,right:0}, alignment:AlignmentType.LEFT });
       case 'accion':
-        return new Paragraph({ children:[run], spacing:{before:0,after:0,line:240,lineRule:'auto'}, indent:{left:0,right:0}, alignment:AlignmentType.LEFT });
+        return new Paragraph({ children:[run], spacing: sp0,  indent:{left:0,right:0}, alignment:AlignmentType.LEFT });
       case 'personaje':
-        return new Paragraph({ children:[run], spacing:{before:tw(0.166),after:0,line:240,lineRule:'auto'}, indent:{left:C.iPersonaje,right:0}, alignment:AlignmentType.LEFT });
+        return new Paragraph({ children:[run], spacing: spSpc, indent:{left:C.iPersonaje,right:0}, alignment:AlignmentType.LEFT });
       case 'dialogo':
-        return new Paragraph({ children:[run], spacing:{before:0,after:0,line:240,lineRule:'auto'}, indent:{left:C.iDialL,right:C.iDialR}, alignment:AlignmentType.LEFT });
+        return new Paragraph({ children:[run], spacing: sp0,  indent:{left:C.iDialL,right:C.iDialR}, alignment:AlignmentType.LEFT });
       case 'acotacion':
-        return new Paragraph({ children:[new TextRun({text:'('+txt+')',font:'Courier New',size:24})], spacing:{before:0,after:0,line:240,lineRule:'auto'}, indent:{left:C.iParL,right:C.iParR}, alignment:AlignmentType.LEFT });
+        return new Paragraph({ children:[new TextRun({text:'('+txt+')',font:'Courier New',size:24})], spacing: sp0, indent:{left:C.iParL,right:C.iParR}, alignment:AlignmentType.LEFT });
       case 'transicion':
-        return new Paragraph({ children:[run], spacing:{before:tw(0.166),after:0,line:240,lineRule:'auto'}, indent:{left:0,right:0}, alignment:AlignmentType.RIGHT });
+        return new Paragraph({ children:[run], spacing: spSpc, indent:{left:0,right:0}, alignment:AlignmentType.RIGHT });
       default:
-        return new Paragraph({ children:[run], spacing:{before:0,after:0,line:240,lineRule:'auto'} });
+        return new Paragraph({ children:[run], spacing: sp0 });
     }
   });
 
@@ -1065,11 +1085,12 @@ async function _docx() {
 
 function mkPortadaParrs(docxLib, tw, C) {
   const { Paragraph, TextRun, AlignmentType } = docxLib;
+  const LINE = 288; // 12pt × 1.2 = 288 twips — igual que el cuerpo del guion
   const ps = [];
   const bl = (txt, align) => new Paragraph({
     children:[new TextRun({text:txt||'',font:'Courier New',size:24})],
     alignment: align || AlignmentType.LEFT,
-    spacing:{before:0,after:0,line:240}
+    spacing:{before:0,after:0,line:LINE,lineRule:'exact'}
   });
   const emp = () => bl('', AlignmentType.LEFT);
 
@@ -1101,7 +1122,7 @@ function mkPortadaParrs(docxLib, tw, C) {
         new TextRun({text:rl[i]||'',font:'Courier New',size:24}),
       ],
       tabStops:[{type:'right',position:tw(6.0)}],
-      spacing:{before:0,after:0,line:240}
+      spacing:{before:0,after:0,line:288,lineRule:'exact'}
     }));
   }
   return ps;
