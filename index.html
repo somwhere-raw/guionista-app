@@ -729,12 +729,12 @@ const FIREBASE_CONFIG = {
    2. CONSTANTES WGA Y TIPOS DE PARRAFO
    ============================================================ */
 const TIPOS = {
-  escena:     { label: 'ESCENA',     upper: true,  paren: false, colon: false },
-  accion:     { label: 'Acción',     upper: false, paren: false, colon: false },
-  personaje:  { label: 'PERSONAJE',  upper: true,  paren: false, colon: false },
+  escena:     { label: 'Escena',     upper: true,  paren: false, colon: false },
+  accion:     { label: 'Accion',     upper: false, paren: false, colon: false },
+  personaje:  { label: 'Personaje',  upper: true,  paren: false, colon: false },
   dialogo:    { label: 'Dialogo',    upper: false, paren: false, colon: false },
-  acotacion:  { label: '(Acotación)',  upper: false, paren: true,  colon: false },
-  transicion: { label: 'TRANSICIÓN', upper: true,  paren: false, colon: true  }
+  acotacion:  { label: 'Acotacion',  upper: false, paren: true,  colon: false },
+  transicion: { label: 'Transicion', upper: true,  paren: false, colon: true  }
 };
 
 /* Secuencia de tipos por contexto:
@@ -794,18 +794,19 @@ const CLIENT_ID = sessionStorage.getItem('_gcid') || (() => {
 })();
 
 const state = {
-  user:           null,
-  scripts:        [],       /* [{id, titulo, ultimaModificacion}] */
-  currentId:      null,
-  darkSheet:      false,
-  sceneNumbers:   false,
-  showCover:      true,
-  cover:          { titulo:'', autor:'', basado:'', contacto:'', registroWGA:'' },
-  saveTimeout:    null,
-  paginateTimeout:null,
-  firestoreUnsub: null,
-  ctxScriptId:    null,     /* Para el menu contextual */
-  isSaving:       false,
+  user:            null,
+  scripts:         [],       /* [{id, titulo, ultimaModificacion}] */
+  currentId:       null,
+  darkSheet:       false,
+  sceneNumbers:    false,
+  showCover:       true,
+  cover:           { titulo:'', autor:'', basado:'', contacto:'', registroWGA:'' },
+  saveTimeout:     null,
+  paginateTimeout: null,
+  firestoreUnsub:  null,    /* Listener del guion abierto */
+  scriptsUnsub:    null,    /* Listener de la lista de guiones del usuario */
+  ctxScriptId:     null,    /* Para el menu contextual */
+  isSaving:        false,
 };
 
 /* ============================================================
@@ -1143,6 +1144,7 @@ function tradAuthError(code) {
 }
 
 async function doSignOut() {
+  if (state.scriptsUnsub)  { state.scriptsUnsub();  state.scriptsUnsub  = null; }
   if (state.firestoreUnsub) { state.firestoreUnsub(); state.firestoreUnsub = null; }
   await auth.signOut();
 }
@@ -1150,13 +1152,70 @@ async function doSignOut() {
 /* ============================================================
    7. GESTION DE GUIONES — FIRESTORE
    ============================================================ */
-async function loadScripts(userId) {
+
+/**
+ * Sustituye a loadScripts. Abre un listener onSnapshot sobre la coleccion
+ * filtrada por userId, de modo que la lista del sidebar se actualiza en tiempo
+ * real (nuevo guion, renombrado, eliminado) sin necesidad de recargar la pagina.
+ *
+ * @param {string}   userId      - UID del usuario autenticado.
+ * @param {Function} [onReady]   - Callback que se ejecuta UNA vez al recibir
+ *                                 el primer snapshot (reemplaza el .then de
+ *                                 loadScripts para abrir el primer guion, etc.)
+ */
+function listenScriptsList(userId, onReady) {
   if (!FB_READY) return;
-  try {
-    const snap = await db.collection('guiones').where('userId','==',userId).orderBy('ultimaModificacion','desc').get();
-    state.scripts = snap.docs.map(d => ({ id: d.id, titulo: d.data().titulo || 'Sin titulo', ultimaModificacion: d.data().ultimaModificacion }));
-    renderSidebar();
-  } catch(e) { console.error('loadScripts:', e); }
+
+  /* Cancelar listener previo del mismo usuario (por si acaso) */
+  if (state.scriptsUnsub) { state.scriptsUnsub(); state.scriptsUnsub = null; }
+
+  /* Mostrar estado de carga */
+  const empty = $('side-empty-msg');
+  if (empty) { empty.style.display = ''; empty.textContent = 'Cargando guiones...'; }
+
+  let firstSnapshot = true;
+
+  state.scriptsUnsub = db.collection('guiones')
+    .where('userId', '==', userId)
+    .orderBy('ultimaModificacion', 'desc')
+    .onSnapshot(
+      snap => {
+        /* Actualizar lista en estado global */
+        state.scripts = snap.docs.map(d => ({
+          id:                 d.id,
+          titulo:             d.data().titulo             || 'Sin titulo',
+          ultimaModificacion: d.data().ultimaModificacion || null,
+        }));
+        renderSidebar();
+
+        /* Ejecutar callback solo la primera vez */
+        if (firstSnapshot) {
+          firstSnapshot = false;
+          if (onReady) onReady();
+        }
+      },
+      err => {
+        console.error('listenScriptsList error:', err.code, err.message);
+        if (empty) {
+          empty.style.display = '';
+          if (err.code === 'failed-precondition') {
+            empty.innerHTML =
+              'Falta el &iacute;ndice compuesto en Firestore.<br>' +
+              'Ve a <b>Firestore &gt; &Iacute;ndices</b> y crea:<br>' +
+              '<code>userId (ASC) + ultimaModificacion (DESC)</code><br>' +
+              'o copia el enlace de la consola del navegador.';
+          } else {
+            empty.textContent = 'Error al cargar guiones: ' + (err.message || err.code);
+          }
+        }
+      }
+    );
+}
+
+/* Compatibilidad: algunos sitios llaman a loadScripts directamente;
+   lo mapeamos al listener para no romper llamadas existentes. */
+async function loadScripts(userId) {
+  return new Promise(resolve => listenScriptsList(userId, resolve));
 }
 
 async function createScript(userId, initialData = null) {
@@ -1911,24 +1970,42 @@ function renderSidebar() {
   const list  = $('scripts-list');
   const empty = $('side-empty-msg');
 
-  /* Limpiar (pero conservar el mensaje de vacio) */
+  /* Limpiar items anteriores (pero conservar el mensaje de vacio) */
   list.querySelectorAll('.sitem').forEach(i => i.remove());
 
   if (!state.user) {
     if (empty) { empty.style.display = ''; empty.textContent = 'Inicia sesion para ver tus guiones'; }
     return;
   }
-  if (empty) { empty.style.display = state.scripts.length === 0 ? '' : 'none'; empty.textContent = 'Sin guiones. Crea uno con +'; }
+
+  if (state.scripts.length === 0) {
+    if (empty) { empty.style.display = ''; empty.textContent = 'Sin guiones. Crea uno con +'; }
+    return;
+  }
+
+  if (empty) empty.style.display = 'none';
 
   state.scripts.forEach(s => {
-    const item = el('div', { className: 'sitem' + (s.id === state.currentId ? ' active' : '') });
+    const item  = el('div', { className: 'sitem' + (s.id === state.currentId ? ' active' : '') });
     item.dataset.id = s.id;
-    const title = el('div', { className: 'sitem-title' }); title.textContent = s.titulo || 'Sin titulo';
-    const date  = el('div', { className: 'sitem-date'  }); date.textContent  = fmtDate(s.ultimaModificacion);
+
+    const title = el('div', { className: 'sitem-title' });
+    title.textContent = s.titulo || 'Sin titulo';
+
+    const date  = el('div', { className: 'sitem-date' });
+    date.textContent = fmtDate(s.ultimaModificacion);
+
     item.appendChild(title);
     item.appendChild(date);
-    item.addEventListener('click', () => { if(state.user) openScript(s.id); });
-    item.addEventListener('contextmenu', e => { e.preventDefault(); showCtxMenu(e, s.id); });
+
+    item.addEventListener('click', () => {
+      if (state.user && s.id !== state.currentId) openScript(s.id);
+    });
+    item.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      showCtxMenu(e, s.id);
+    });
+
     list.appendChild(item);
   });
 }
@@ -2270,26 +2347,33 @@ function onAuthStateChanged(user) {
   state.user = user;
 
   if (user) {
-    /* Usuario autenticado */
-    $('user-label').textContent = user.email;
+    /* — Usuario autenticado — */
+    $('user-label').textContent = user.displayName || user.email || '';
     $('btn-auth').textContent   = 'Cerrar sesion';
     $('no-session-notice').style.display = 'none';
 
-    /* Contenido anonimo pendiente? */
+    /* Verificar contenido anonimo pendiente */
     let anonData = null;
-    try { const raw = localStorage.getItem('_guionista_anon'); anonData = raw ? JSON.parse(raw) : null; } catch(_) {}
+    try {
+      const raw = localStorage.getItem('_guionista_anon');
+      anonData = raw ? JSON.parse(raw) : null;
+    } catch(_) {}
 
-    loadScripts(user.uid).then(async () => {
-      if (anonData && anonData.contenido && anonData.contenido.length > 0 &&
-          (anonData.contenido.length > 1 || anonData.contenido[0].html)) {
-        /* Guardar contenido anonimo como nuevo guion */
+    /* Abrir listener de lista; la logica de "primer guion a abrir"
+       se ejecuta en el callback onReady (primer snapshot recibido). */
+    listenScriptsList(user.uid, async () => {
+      if (
+        anonData && anonData.contenido && anonData.contenido.length > 0 &&
+        (anonData.contenido.length > 1 || anonData.contenido[0].html)
+      ) {
+        /* Importar contenido anonimo como nuevo guion */
         const newId = await createScript(user.uid, {
-          titulo:   anonData.cover?.titulo || 'Guion importado',
-          portada:  anonData.cover,
+          titulo:    anonData.cover?.titulo || 'Guion importado',
+          portada:   anonData.cover,
           contenido: anonData.contenido,
         });
         localStorage.removeItem('_guionista_anon');
-        await loadScripts(user.uid);
+        /* El listener onSnapshot actualizara el sidebar automaticamente */
         if (newId) await openScript(newId);
       } else if (state.scripts.length > 0) {
         await openScript(state.scripts[0].id);
@@ -2297,13 +2381,18 @@ function onAuthStateChanged(user) {
         initEmptyEditor();
       }
     });
+
   } else {
-    /* Sin sesion */
+    /* — Sin sesion — */
     $('user-label').textContent = '';
     $('btn-auth').textContent   = 'Iniciar sesion';
     $('no-session-notice').style.display = '';
+
+    /* Cancelar ambos listeners */
+    if (state.scriptsUnsub)   { state.scriptsUnsub();   state.scriptsUnsub   = null; }
     if (state.firestoreUnsub) { state.firestoreUnsub(); state.firestoreUnsub = null; }
-    state.scripts = [];
+
+    state.scripts   = [];
     state.currentId = null;
     renderSidebar();
     initEmptyEditor();
@@ -2338,10 +2427,8 @@ function bindUIEvents() {
   $('btn-new-script').addEventListener('click', async () => {
     if (!state.user) { showAuthModal(); return; }
     const id = await createScript(state.user.uid);
-    if (id) {
-      await loadScripts(state.user.uid);
-      await openScript(id);
-    }
+    /* El listener onSnapshot actualiza el sidebar automaticamente */
+    if (id) await openScript(id);
   });
 
   /* Botones de formato — mousedown previene perder el foco del editor */
@@ -2381,8 +2468,11 @@ function bindUIEvents() {
     const current = state.scripts.find(s => s.id === id);
     const newTitle = prompt('Nuevo nombre del guion:', current?.titulo || '');
     if (newTitle === null || !newTitle.trim()) return;
-    await db.collection('guiones').doc(id).update({ titulo: newTitle.trim() });
-    await loadScripts(state.user.uid);
+    await db.collection('guiones').doc(id).update({
+      titulo: newTitle.trim(),
+      ultimaModificacion: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    /* El listener onSnapshot actualiza el sidebar automaticamente */
     if (state.currentId === id) $('toolbar-title').textContent = newTitle.trim();
   });
   $('ctx-delete').addEventListener('click', () => { hideCtxMenu(); deleteScript(state.ctxScriptId); });
