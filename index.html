@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Editor de Guiones — WGA</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital@0;1&family=Courier+Prime&display=swap');
+
+/* ================================================================
+   VARIABLES — UI SIEMPRE OSCURA, HOJA CAMBIA CON MODO
+   ================================================================ */
+:root {
+  --ui-bg:       #0c0c0c;
+  --ui-surf:     #111111;
+  --ui-surf2:    #161616;
+  --ui-border:   #252525;
+  --ui-border2:  #383838;
+  --ui-txt:      #b0b0b0;
+  --ui-txt2:     #666;
+  --ui-txth:     #ebebeb;
+
+  /* Hoja — modo claro por defecto */
+  --pg-bg:       #ffffff;
+  --pg-txt:      #000000;
+  --pg-shadow:   0 4px 48px rgba(0,0,0,0.6), 0 1px 6px rgba(0,0,0,0.3);
+
+  --mono: 'Courier Prime', 'Courier New', Courier, monospace;
+  --serif: 'Libre Baskerville', Georgia, serif;
+}
+
+/* Hoja oscura */
+html.dark-page {
+  --pg-bg:    #131313;
+  --pg-txt:   #dedede;
+  --pg-shadow: 0 4px 48px rgba(0,0,0,0.9), 0 1px 6px rgba(0,0,0,0.6);
+}
+
+/* ================================================================
+   RESET
+   ================================================================ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--ui-bg);color:var(--ui-txt);font-family:var(--serif);font-size:13px;overflow:hidden;}
+
+/* ================================================================
+   LAYOUT
+   ================================================================ */
+#app{
+  display:grid;
+  grid-template-rows:42px 1fr 24px;
+  grid-template-columns:188px 1fr;
+  grid-template-areas:"hdr hdr" "nav cnv" "stt stt";
+  height:100vh;
+}
+
+/* ================================================================
+   HEADER
+   ================================================================ */
+#hdr{
+  grid-area:hdr;
+  background:var(--ui-surf);
+  border-bottom:1px solid var(--ui-border);
+  display:flex;
+  align-items:center;
+  padding:0 18px;
+  gap:0;
+  user-select:none;
+}
+
+.logo{
+  font-family:var(--serif);
+  font-style:italic;
+  font-size:11px;
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  color:var(--ui-txt2);
+  margin-right:24px;
+  white-space:nowrap;
+}
+
+/* Separador vertical */
+.vsep{width:1px;height:16px;background:var(--ui-border);margin:0 14px;flex-shrink:0;}
+
+/* Grupos de botones */
+.hgrp{display:flex;align-items:center;gap:1px;}
+
+/* Boton del header */
+.hb{
+  background:transparent;
+  border:none;
+  color:var(--ui-txt);
+  font-family:var(--serif);
+  font-size:10.5px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  padding:5px 11px;
+  cursor:pointer;
+  border-radius:2px;
+  white-space:nowrap;
+  transition:background .1s,color .1s;
+}
+.hb:hover{background:var(--ui-border);color:var(--ui-txth);}
+.hb.on{background:var(--ui-txth);color:var(--ui-bg);}
+
+/* Select formato */
+select.fmt{
+  background:var(--ui-surf2);
+  color:var(--ui-txt);
+  border:1px solid var(--ui-border2);
+  padding:4px 7px;
+  font-family:var(--serif);
+  font-size:10.5px;
+  letter-spacing:.08em;
+  border-radius:2px;
+  cursor:pointer;
+  margin-right:3px;
+}
+select.fmt:focus{outline:none;border-color:var(--ui-txth);}
+
+/* Select tipo activo */
+select.tipo-sel{
+  background:var(--ui-bg);
+  color:var(--ui-txth);
+  border:1px solid var(--ui-border2);
+  padding:4px 8px;
+  font-family:var(--mono);
+  font-size:10.5px;
+  border-radius:2px;
+  cursor:pointer;
+  min-width:185px;
+}
+select.tipo-sel:focus{outline:none;}
+
+.pgcount{
+  margin-left:auto;
+  font-family:var(--mono);
+  font-size:9.5px;
+  color:var(--ui-txt2);
+  letter-spacing:.12em;
+}
+
+/* ================================================================
+   SIDEBAR
+   ================================================================ */
+#nav{
+  grid-area:nav;
+  background:var(--ui-surf);
+  border-right:1px solid var(--ui-border);
+  overflow-y:auto;
+  padding:18px 0 24px;
+}
+
+.nb-sec{margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--ui-border);}
+.nb-sec:last-child{border-bottom:none;margin-bottom:0;}
+
+.nb-lbl{
+  display:block;
+  font-size:8.5px;
+  letter-spacing:.28em;
+  text-transform:uppercase;
+  color:var(--ui-txt2);
+  padding:0 16px 8px;
+}
+
+.nb{
+  display:block;width:100%;background:transparent;border:none;
+  color:var(--ui-txt);font-family:var(--mono);font-size:10.5px;
+  text-align:left;padding:6px 16px;cursor:pointer;
+  letter-spacing:.04em;border-left:2px solid transparent;
+  transition:background .1s,color .1s,border-color .1s;
+}
+.nb:hover{background:var(--ui-border);color:var(--ui-txth);border-left-color:var(--ui-border2);}
+
+/* Atajos */
+.atajos{padding:4px 16px 0;font-family:var(--mono);font-size:9.5px;color:var(--ui-txt2);line-height:2.1;}
+.atajos kbd{background:var(--ui-border);border-radius:2px;padding:1px 5px;font-family:var(--mono);font-size:9px;color:var(--ui-txt);}
+
+/* ================================================================
+   CANVAS
+   ================================================================ */
+#cnv{
+  grid-area:cnv;
+  overflow-y:auto;
+  background:var(--ui-bg);
+  background-image:radial-gradient(circle,#1e1e1e 1px,transparent 1px);
+  background-size:22px 22px;
+  padding:36px 36px 80px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:0;
+}
+
+/* ================================================================
+   PAGINAS
+   ================================================================ */
+.pagina{
+  background:var(--pg-bg);
+  color:var(--pg-txt);
+  /* Letter: 8.5" x 11" @ 96dpi = 816 x 1056px */
+  width:816px;
+  height:1056px;
+  /* WGA Letter: 1.5" izq, 1" der, 1" top, 1" bot */
+  padding:96px 96px 96px 144px;
+  position:relative;
+  box-shadow:var(--pg-shadow);
+  flex-shrink:0;
+  margin-bottom:22px;
+  overflow:hidden;
+  transition:background .25s,color .25s,box-shadow .25s;
+}
+
+/* A4: 794 x 1123px @ 96dpi (210 x 297mm) */
+/* WGA A4: izq ~3.5cm=134px, der ~2.5cm=96px, top/bot ~2.5cm=96px */
+.pagina.a4{
+  width:794px;
+  height:1123px;
+  padding:96px 96px 96px 134px;
+}
+
+/* Numero de pagina — top right, 0.5" top 1" right */
+.pagina .npg{
+  position:absolute;
+  top:48px;right:96px;
+  font-family:var(--mono);font-size:12pt;
+  color:var(--pg-txt);
+  pointer-events:none;user-select:none;
+  line-height:1;
+  transition:color .25s;
+}
+/* Primera pagina no lleva numero */
+.pagina:first-child .npg{display:none;}
+
+/* Guia sutil del margen inferior */
+.pagina::after{
+  content:'';
+  position:absolute;
+  bottom:96px;left:144px;right:96px;
+  height:1px;
+  background:rgba(128,128,128,0.06);
+  pointer-events:none;
+}
+.pagina.a4::after{left:134px;}
+
+/* ================================================================
+   BLOQUES DEL GUION
+   ================================================================ */
+.bl{
+  font-family:var(--mono);
+  font-size:12pt;
+  line-height:1.2;
+  color:var(--pg-txt);
+  outline:none;
+  min-height:1.2em;
+  white-space:pre-wrap;
+  word-wrap:break-word;
+  position:relative;
+  /* Indicador izquierdo al foco */
+  border-left:2px solid transparent;
+  padding-left:2px;
+  margin-left:-2px;
+  transition:border-color .12s,color .25s;
+}
+.bl:focus{border-left-color:var(--pg-txt);opacity:1;}
+.bl:focus::before{
+  position:absolute;
+  left:calc(-144px + 4px);
+  top:1px;
+  font-size:8px;
+  font-family:var(--serif);
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--ui-txt2);
+  white-space:nowrap;
+  pointer-events:none;
+}
+.pagina.a4 .bl:focus::before{left:calc(-134px + 4px);}
+
+/* --- ESCENA --- */
+.bl[data-t="escena"]{text-transform:uppercase;margin-top:1.2em;}
+.bl[data-t="escena"]:focus::before{content:'escena';}
+
+/* --- ACCION --- */
+.bl[data-t="accion"]{margin-top:0;}
+.bl[data-t="accion"]:focus::before{content:'accion';}
+
+/* --- PERSONAJE --- */
+/* Letter: 3.7" - 1.5" = 2.2" = 211px */
+.bl[data-t="personaje"]{text-transform:uppercase;margin-left:211px;margin-top:1.2em;}
+.bl[data-t="personaje"]:focus::before{content:'personaje';}
+/* A4: proporcional */
+.pagina.a4 .bl[data-t="personaje"]{margin-left:186px;}
+
+/* --- DIALOGO --- */
+/* 1" desde margen izq, 1.5" desde margen der */
+.bl[data-t="dialogo"]{margin-left:96px;margin-right:96px;margin-top:0;}
+.bl[data-t="dialogo"]:focus::before{content:'dialogo';}
+
+/* --- ACOTACION --- */
+/* 1.6" desde margen izq */
+.bl[data-t="acotacion"]{margin-left:154px;margin-right:96px;margin-top:0;}
+.bl[data-t="acotacion"]:focus::before{content:'acotacion';}
+/* Parentesis decorativos via CSS (no afectan al texto exportado) */
+.bl[data-t="acotacion"]:before{content:'(';font-family:var(--mono);font-size:12pt;position:static;display:inline;opacity:1;text-transform:none;letter-spacing:0;color:inherit;}
+.bl[data-t="acotacion"]:after{content:')';font-family:var(--mono);font-size:12pt;color:inherit;}
+
+/* --- TRANSICION --- */
+.bl[data-t="transicion"]{text-transform:uppercase;text-align:right;margin-top:1.2em;}
+.bl[data-t="transicion"]:focus::before{content:'transicion';}
+
+/* ================================================================
+   STATUSBAR
+   ================================================================ */
+#stt{
+  grid-area:stt;
+  background:var(--ui-surf);
+  border-top:1px solid var(--ui-border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 18px;
+  font-family:var(--mono);font-size:9.5px;color:var(--ui-txt2);
+  letter-spacing:.08em;
+}
+
+/* ================================================================
+   MODAL
+   ================================================================ */
+.mwrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:500;align-items:center;justify-content:center;}
+.mwrap.open{display:flex;}
+.modal{background:var(--ui-surf);border:1px solid var(--ui-border2);width:500px;max-width:95vw;max-height:90vh;overflow-y:auto;padding:28px;}
+.mtitle{font-family:var(--serif);font-style:italic;font-size:12px;letter-spacing:.2em;text-transform:uppercase;color:var(--ui-txth);margin-bottom:24px;padding-bottom:12px;border-bottom:1px solid var(--ui-border);}
+.fg{margin-bottom:16px;}
+.fg label{display:block;font-size:8.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--ui-txt2);margin-bottom:6px;}
+.fg input,.fg textarea{width:100%;background:var(--ui-bg);border:1px solid var(--ui-border);color:var(--ui-txth);padding:7px 9px;font-family:var(--mono);font-size:11.5px;resize:vertical;transition:border-color .1s;}
+.fg input:focus,.fg textarea:focus{outline:none;border-color:var(--ui-txth);}
+.fg textarea{min-height:60px;}
+.fgrow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.mfooter{display:flex;justify-content:flex-end;gap:8px;margin-top:22px;padding-top:16px;border-top:1px solid var(--ui-border);}
+.mb{background:transparent;border:1px solid var(--ui-border2);color:var(--ui-txt);font-family:var(--serif);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding:7px 18px;cursor:pointer;transition:background .1s,color .1s;}
+.mb:hover{background:var(--ui-border);color:var(--ui-txth);}
+.mb.pri{background:var(--ui-txth);border-color:var(--ui-txth);color:var(--ui-bg);}
+.mb.pri:hover{opacity:.85;}
+
+/* ================================================================
+   SPINNER
+   ================================================================ */
+#spin{display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:14px;font-family:var(--mono);font-size:10px;letter-spacing:.15em;color:var(--ui-txt2);}
+#spin.on{display:flex;}
+.sring{width:28px;height:28px;border:2px solid var(--ui-border);border-top-color:var(--ui-txth);border-radius:50%;animation:sp .7s linear infinite;}
+@keyframes sp{to{transform:rotate(360deg);}}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--ui-bg);}
+::-webkit-scrollbar-thumb{background:var(--ui-border);}
+::-webkit-scrollbar-thumb:hover{background:var(--ui-border2);}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ===========================================================
+     HEADER
+     =========================================================== -->
+<header id="hdr">
+  <span class="logo">Editor de Guiones &mdash; WGA</span>
+
+  <div class="hgrp">
+    <button class="hb" onclick="nuevoGuion()">Nuevo</button>
+    <button class="hb" onclick="guardarLocal()">Guardar</button>
+    <button class="hb" onclick="cargarLocal()">Cargar</button>
+  </div>
+
+  <div class="vsep"></div>
+
+  <div class="hgrp">
+    <button class="hb" onclick="abrirPortada()">Portada</button>
+  </div>
+
+  <div class="vsep"></div>
+
+  <div class="hgrp">
+    <select id="fmt-sel" class="fmt" title="Formato de pagina para exportar DOCX">
+      <option value="letter">Letter  8.5 x 11&Prime;</option>
+      <option value="a4">A4  210 x 297 mm</option>
+    </select>
+    <button class="hb on" onclick="exportarDOCX()">Exportar DOCX</button>
+  </div>
+
+  <div class="vsep"></div>
+
+  <select id="tipo-sel" class="tipo-sel" title="Tipo de elemento activo">
+    <option value="escena">ENCABEZADO DE ESCENA</option>
+    <option value="accion">Accion</option>
+    <option value="personaje">PERSONAJE</option>
+    <option value="dialogo">Dialogo</option>
+    <option value="acotacion">Acotacion</option>
+    <option value="transicion">TRANSICION</option>
+  </select>
+
+  <div class="vsep"></div>
+
+  <button class="hb" id="btn-dp" onclick="toggleDark()">Hoja oscura</button>
+
+  <span class="pgcount" id="pgcount">1 pag</span>
+</header>
+
+<!-- ===========================================================
+     SIDEBAR
+     =========================================================== -->
+<nav id="nav">
+  <div class="nb-sec">
+    <span class="nb-lbl">Elementos</span>
+    <button class="nb" onclick="insertarTipo('escena')">ENCAB. ESCENA</button>
+    <button class="nb" onclick="insertarTipo('accion')">Accion</button>
+    <button class="nb" onclick="insertarTipo('personaje')">PERSONAJE</button>
+    <button class="nb" onclick="insertarTipo('dialogo')">Dialogo</button>
+    <button class="nb" onclick="insertarTipo('acotacion')">(Acotacion)</button>
+    <button class="nb" onclick="insertarTipo('transicion')">TRANSICION</button>
+  </div>
+
+  <div class="nb-sec">
+    <span class="nb-lbl">Paginas</span>
+    <button class="nb" onclick="agregarPagina()">+ Agregar pagina</button>
+  </div>
+
+  <div class="nb-sec">
+    <span class="nb-lbl">Atajos</span>
+    <div class="atajos">
+      <kbd>Enter</kbd> Escena &rarr; Accion<br>
+      <kbd>Enter</kbd> Personaje &rarr; Dialogo<br>
+      <kbd>Enter</kbd> Dialogo &rarr; Accion<br>
+      <kbd>Enter</kbd> Acotacion &rarr; Dialogo<br>
+      <kbd>Tab</kbd> Accion &rarr; Personaje<br>
+      <kbd>Tab</kbd> Personaje &rarr; Acotacion<br>
+      <kbd>Shift+Tab</kbd> Tipo anterior<br>
+      <kbd>Ctrl+S</kbd> Guardar<br>
+    </div>
+  </div>
+</nav>
+
+<!-- ===========================================================
+     CANVAS
+     =========================================================== -->
+<main id="cnv">
+  <!-- Paginas generadas por JS -->
+</main>
+
+<!-- ===========================================================
+     STATUSBAR
+     =========================================================== -->
+<footer id="stt">
+  <span id="stmsg">Listo.</span>
+  <span id="wcount">0 palabras</span>
+</footer>
+
+</div><!-- #app -->
+
+<!-- ===========================================================
+     MODAL PORTADA
+     =========================================================== -->
+<div id="mod-portada" class="mwrap">
+  <div class="modal">
+    <div class="mtitle">Portada del Guion</div>
+    <div class="fg">
+      <label>Titulo del guion</label>
+      <input type="text" id="p-tit" placeholder="EL ULTIMO VERANO" />
+    </div>
+    <div class="fg">
+      <label>Leyenda de autoria</label>
+      <input type="text" id="p-esc" value="escrito por" />
+    </div>
+    <div class="fg">
+      <label>Nombre del autor / autores</label>
+      <input type="text" id="p-aut" placeholder="Juan Perez" />
+    </div>
+    <div class="fgrow">
+      <div class="fg">
+        <label>Contacto (inf. izquierda)</label>
+        <textarea id="p-con" placeholder="Direccion&#10;Telefono&#10;Email"></textarea>
+      </div>
+      <div class="fg">
+        <label>Registro (inf. derecha)</label>
+        <textarea id="p-reg" placeholder="(c) 2025&#10;WGA Reg. #XXX"></textarea>
+      </div>
+    </div>
+    <div class="mfooter">
+      <button class="mb" onclick="cerrarMod()">Cancelar</button>
+      <button class="mb pri" onclick="guardarPortada()">Guardar portada</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===========================================================
+     SPINNER
+     =========================================================== -->
+<div id="spin">
+  <div class="sring"></div>
+  <span id="spinmsg">Procesando...</span>
+</div>
+
+<!-- ===========================================================
+     JAVASCRIPT
+     =========================================================== -->
+<script>
+/* ============================================================
+   ESTADO GLOBAL
+   ============================================================ */
+const TIPOS = {
+  escena:    {sig:'accion',    tabSig:'accion'},
+  accion:    {sig:'accion',    tabSig:'personaje'},
+  personaje: {sig:'dialogo',   tabSig:'acotacion'},
+  dialogo:   {sig:'accion',    tabSig:'personaje'},
+  acotacion: {sig:'dialogo',   tabSig:'dialogo'},
+  transicion:{sig:'escena',    tabSig:'escena'},
+};
+const ORDEN = ['escena','accion','personaje','dialogo','acotacion','transicion'];
+
+let portada = {titulo:'',escrito_por:'escrito por',autor:'',contacto:'',registro:''};
+let darkPage = false;
+let formato  = 'letter';  // 'letter' | 'a4'
+let asTimer  = null;      // auto-save timer
+
+const cnv = document.getElementById('cnv');
+
+/* ============================================================
+   ARRANQUE
+   ============================================================ */
+window.addEventListener('load', () => {
+  // Conectar controles del header
+  document.getElementById('fmt-sel').addEventListener('change', e => {
+    formato = e.target.value;
+    actualizarFormatoVisual();
+  });
+  document.getElementById('tipo-sel').addEventListener('change', e => {
+    const b = document.querySelector('.bl:focus');
+    if (b) setTipo(b, e.target.value);
+  });
+
+  // Intentar recuperar sesion guardada
+  try {
+    const raw = localStorage.getItem('gwga3');
+    if (raw) {
+      const d = JSON.parse(raw);
+      portada  = d.portada  || portada;
+      darkPage = d.darkPage || false;
+      if (darkPage) { document.documentElement.classList.add('dark-page'); document.getElementById('btn-dp').classList.add('on'); }
+      if (d.pags && d.pags.length) { cargarPags(d.pags); }
+      else iniciarEj();
+      st('Guion cargado de memoria local.');
+      return;
+    }
+  } catch(e) {}
+
+  iniciarEj();
+  st('Nuevo guion. Escribe o usa el panel lateral para insertar elementos.');
+  setInterval(() => autoSave(), 30000);
+});
+
+/* ============================================================
+   EJEMPLO INICIAL
+   ============================================================ */
+function iniciarEj() {
+  cnv.innerHTML = '';
+  const p1 = mkPag();
+  mkBl('escena',    'INT. OFICINA DE RODRIGO - DIA', p1);
+  mkBl('accion',    'La luz entra por la ventana. RODRIGO (35), con ojeras, mira fijamente la pantalla.', p1);
+  mkBl('personaje', 'RODRIGO', p1);
+  mkBl('acotacion', 'para si mismo', p1);
+  mkBl('dialogo',   'Por que siempre dejo todo para el ultimo minuto?', p1);
+  mkBl('accion',    'Suena el telefono. Rodrigo lo mira con desconfianza.', p1);
+  mkBl('personaje', 'RODRIGO', p1);
+  mkBl('dialogo',   'Diga...', p1);
+  mkBl('transicion','CORTE A:', p1);
+
+  const p2 = mkPag();
+  mkBl('escena',    'EXT. CALLE PRINCIPAL - NOCHE', p2);
+  mkBl('accion',    'La ciudad duerme. Un taxi solitario cruza el encuadre.', p2);
+
+  numPags();
+}
+
+/* ============================================================
+   GESTION DE PAGINAS
+   ============================================================ */
+function mkPag() {
+  const d = document.createElement('div');
+  d.className = 'pagina' + (formato === 'a4' ? ' a4' : '');
+
+  // Numero de pagina (no visible en pagina 1)
+  const np = document.createElement('div');
+  np.className = 'npg';
+  d.appendChild(np);
+
+  // Clic en area libre enfoca ultimo bloque o crea uno nuevo
+  d.addEventListener('click', e => {
+    if (e.target === d || e.target === np) {
+      const ubs = d.querySelectorAll('.bl');
+      if (ubs.length) { const u = ubs[ubs.length-1]; u.focus(); ponFin(u); }
+      else { mkBl('accion','',d).focus(); }
+    }
+  });
+
+  cnv.appendChild(d);
+  numPags();
+  return d;
+}
+
+function agregarPagina() {
+  const p = mkPag();
+  mkBl('accion','',p).focus();
+  setTimeout(() => p.scrollIntoView({behavior:'smooth',block:'start'}), 50);
+  st('Pagina nueva agregada.');
+}
+
+function numPags() {
+  const ps = cnv.querySelectorAll('.pagina');
+  ps.forEach((p, i) => {
+    let n = p.querySelector('.npg');
+    if (!n) { n=document.createElement('div'); n.className='npg'; p.prepend(n); }
+    n.textContent = (i+1)+'.';
+  });
+  const c = ps.length;
+  document.getElementById('pgcount').textContent = c + ' pag' + (c!==1?'s':'');
+  cntWords();
+}
+
+function actualizarFormatoVisual() {
+  cnv.querySelectorAll('.pagina').forEach(p => {
+    if (formato==='a4') p.classList.add('a4');
+    else p.classList.remove('a4');
+  });
+  numPags();
+}
+
+/* ============================================================
+   GESTION DE BLOQUES
+   ============================================================ */
+function mkBl(tipo, txt, pagina, refSibling) {
+  const d = document.createElement('div');
+  d.className = 'bl';
+  d.dataset.t = tipo;
+  d.contentEditable = 'true';
+  d.spellcheck = true;
+  d.textContent = txt;
+
+  d.addEventListener('keydown', onKey);
+  d.addEventListener('input', () => { chkOverflow(d); cntWords(); dispAS(); });
+  d.addEventListener('focus', () => {
+    document.getElementById('tipo-sel').value = tipo;
+  });
+  d.addEventListener('paste', onPaste);
+
+  if (refSibling) refSibling.after(d);
+  else pagina.appendChild(d);
+
+  return d;
+}
+
+// Crear bloque nuevo despues de refBloque
+function mkBlAfter(tipo, txt, refBloque) {
+  return mkBl(tipo, txt, null, refBloque);
+}
+
+function setTipo(d, t) {
+  d.dataset.t = t;
+}
+
+function insertarTipo(tipo) {
+  const activo = document.querySelector('.bl:focus');
+  if (activo) {
+    const nuevo = mkBlAfter(tipo, '', activo);
+    nuevo.focus(); ponFin(nuevo);
+    return;
+  }
+  // Al final de la ultima pagina
+  const ps = cnv.querySelectorAll('.pagina');
+  const ult = ps[ps.length-1];
+  if (ult) mkBl(tipo,'',ult).focus();
+}
+
+/* ============================================================
+   DESBORDAMIENTO DE PAGINA
+   Cuando el contenido de una pagina excede su area util,
+   el ultimo bloque se mueve a la pagina siguiente.
+   ============================================================ */
+function alturaUtil(pag) {
+  const cs = getComputedStyle(pag);
+  return pag.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+}
+
+function chkOverflow(blActivo) {
+  const pag = blActivo.closest('.pagina');
+  if (!pag) return;
+
+  const au = alturaUtil(pag);
+  const bls = Array.from(pag.querySelectorAll('.bl'));
+  let total = 0;
+  bls.forEach(b => { total += b.offsetHeight; });
+
+  if (total <= au) {
+    // Ver si podemos absorber bloques de la pagina siguiente
+    pullFromNext(pag);
+    return;
+  }
+
+  // Desbordamiento: mover el ultimo bloque a la pagina siguiente
+  if (bls.length <= 1) return; // no mover si es el unico bloque
+
+  const ultBl = bls[bls.length - 1];
+  let sigPag = pag.nextElementSibling;
+  if (!sigPag || !sigPag.classList.contains('pagina')) {
+    sigPag = mkPag();
+    pag.after(sigPag);
+  }
+
+  // Insertar al inicio de la siguiente pagina (despues del .npg)
+  const npEl = sigPag.querySelector('.npg');
+  if (npEl && npEl.nextSibling) sigPag.insertBefore(ultBl, npEl.nextSibling);
+  else if (npEl) npEl.after(ultBl);
+  else sigPag.prepend(ultBl);
+
+  numPags();
+  // Verificar recursivamente la pagina siguiente
+  setTimeout(() => chkOverflowPag(sigPag), 0);
+}
+
+function chkOverflowPag(pag) {
+  const au = alturaUtil(pag);
+  const bls = Array.from(pag.querySelectorAll('.bl'));
+  let total = 0;
+  bls.forEach(b => { total += b.offsetHeight; });
+  if (total > au && bls.length > 1) {
+    const ultBl = bls[bls.length - 1];
+    let sigPag = pag.nextElementSibling;
+    if (!sigPag || !sigPag.classList.contains('pagina')) {
+      sigPag = mkPag();
+      pag.after(sigPag);
+    }
+    const npEl = sigPag.querySelector('.npg');
+    if (npEl && npEl.nextSibling) sigPag.insertBefore(ultBl, npEl.nextSibling);
+    else if (npEl) npEl.after(ultBl);
+    else sigPag.prepend(ultBl);
+    numPags();
+    setTimeout(() => chkOverflowPag(sigPag), 0);
+  }
+}
+
+// Absorber bloques de la pagina siguiente si hay espacio
+function pullFromNext(pag) {
+  const sigPag = pag.nextElementSibling;
+  if (!sigPag || !sigPag.classList.contains('pagina')) return;
+  const primerBl = sigPag.querySelector('.bl');
+  if (!primerBl) return;
+  const au = alturaUtil(pag);
+  const bls = pag.querySelectorAll('.bl');
+  let total = 0;
+  bls.forEach(b => { total += b.offsetHeight; });
+  const cabria = total + primerBl.offsetHeight;
+  if (cabria <= au) {
+    pag.appendChild(primerBl);
+    // Si la pagina siguiente quedo vacia, eliminarla (no la primera)
+    const blsSig = sigPag.querySelectorAll('.bl');
+    if (blsSig.length === 0) {
+      const todas = cnv.querySelectorAll('.pagina');
+      if (todas.length > 1) sigPag.remove();
+    }
+    numPags();
+    pullFromNext(pag); // continuar absorbiendo
+  }
+}
+
+/* ============================================================
+   TECLADO
+   ============================================================ */
+function onKey(e) {
+  const d = e.target;
+  const t = d.dataset.t;
+
+  if (e.ctrlKey && e.key==='s') { e.preventDefault(); guardarLocal(); return; }
+
+  if (e.key==='Tab' && !e.shiftKey) {
+    e.preventDefault();
+    const nt = TIPOS[t].tabSig;
+    setTipo(d, nt);
+    document.getElementById('tipo-sel').value = nt;
+    return;
+  }
+  if (e.key==='Tab' && e.shiftKey) {
+    e.preventDefault();
+    const idx = ORDEN.indexOf(t);
+    const nt = ORDEN[(idx-1+ORDEN.length)%ORDEN.length];
+    setTipo(d, nt);
+    document.getElementById('tipo-sel').value = nt;
+    return;
+  }
+  if (e.key==='Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const nt = TIPOS[t].sig;
+    const nuevo = mkBlAfter(nt, '', d);
+    nuevo.focus(); ponFin(nuevo);
+    document.getElementById('tipo-sel').value = nt;
+    requestAnimationFrame(() => chkOverflow(nuevo));
+    return;
+  }
+  if (e.key==='Backspace') {
+    const sel = window.getSelection();
+    if (sel.isCollapsed && sel.anchorOffset===0 && d.textContent.trim()==='') {
+      e.preventDefault();
+      const prev = blAnterior(d);
+      const pag  = d.closest('.pagina');
+      d.remove();
+      if (!pag.querySelector('.bl')) {
+        const todas = cnv.querySelectorAll('.pagina');
+        if (todas.length > 1) pag.remove();
+      }
+      if (prev) { prev.focus(); ponFin(prev); }
+      numPags();
+      return;
+    }
+  }
+}
+
+function blAnterior(d) {
+  const prev = d.previousElementSibling;
+  if (prev && prev.classList.contains('bl')) return prev;
+  const pag = d.closest('.pagina');
+  const pagAnt = pag.previousElementSibling;
+  if (!pagAnt || !pagAnt.classList.contains('pagina')) return null;
+  const bls = pagAnt.querySelectorAll('.bl');
+  return bls.length ? bls[bls.length-1] : null;
+}
+
+function ponFin(el) {
+  const r = document.createRange();
+  const s = window.getSelection();
+  r.selectNodeContents(el); r.collapse(false);
+  s.removeAllRanges(); s.addRange(r);
+}
+
+function onPaste(e) {
+  e.preventDefault();
+  const txt = (e.clipboardData||window.clipboardData).getData('text/plain');
+  document.execCommand('insertText', false, txt);
+}
+
+/* ============================================================
+   MODO OSCURO DE HOJA
+   ============================================================ */
+function toggleDark() {
+  darkPage = !darkPage;
+  document.documentElement.classList.toggle('dark-page', darkPage);
+  document.getElementById('btn-dp').classList.toggle('on', darkPage);
+  autoSave();
+}
+
+/* ============================================================
+   GUARDAR / CARGAR
+   ============================================================ */
+function serial() {
+  const pags = [];
+  cnv.querySelectorAll('.pagina').forEach(pag => {
+    const bls = [];
+    pag.querySelectorAll('.bl').forEach(b => bls.push({t:b.dataset.t, tx:b.textContent}));
+    pags.push(bls);
+  });
+  return {pags, portada, darkPage, fmt:formato, ts:Date.now()};
+}
+
+function cargarPags(pags) {
+  cnv.innerHTML = '';
+  pags.forEach(bls => {
+    const p = mkPag();
+    bls.forEach(b => mkBl(b.t, b.tx, p));
+  });
+  numPags();
+}
+
+function guardarLocal() {
+  localStorage.setItem('gwga3', JSON.stringify(serial()));
+  st('Guardado — ' + new Date().toLocaleTimeString('es-ES'));
+}
+
+function autoSave() {
+  localStorage.setItem('gwga3', JSON.stringify(serial()));
+}
+
+function dispAS() {
+  clearTimeout(asTimer);
+  asTimer = setTimeout(autoSave, 4000);
+}
+
+function cargarLocal() {
+  const raw = localStorage.getItem('gwga3');
+  if (!raw) { st('Sin guion guardado en memoria local.'); return; }
+  if (!confirm('Cargar guion guardado? Se perderan los cambios actuales no guardados.')) return;
+  const d = JSON.parse(raw);
+  portada  = d.portada  || portada;
+  darkPage = d.darkPage || false;
+  formato  = d.fmt      || 'letter';
+  document.getElementById('fmt-sel').value = formato;
+  document.documentElement.classList.toggle('dark-page', darkPage);
+  document.getElementById('btn-dp').classList.toggle('on', darkPage);
+  if (d.pags && d.pags.length) cargarPags(d.pags);
+  else iniciarEj();
+  st('Guion cargado.');
+}
+
+function nuevoGuion() {
+  if (!confirm('Iniciar nuevo guion? Se perdera el contenido actual no guardado.')) return;
+  cnv.innerHTML = '';
+  iniciarEj();
+  st('Nuevo guion iniciado.');
+}
+
+/* ============================================================
+   PORTADA
+   ============================================================ */
+function abrirPortada() {
+  document.getElementById('p-tit').value = portada.titulo;
+  document.getElementById('p-esc').value = portada.escrito_por;
+  document.getElementById('p-aut').value = portada.autor;
+  document.getElementById('p-con').value = portada.contacto;
+  document.getElementById('p-reg').value = portada.registro;
+  document.getElementById('mod-portada').classList.add('open');
+}
+function cerrarMod() { document.getElementById('mod-portada').classList.remove('open'); }
+function guardarPortada() {
+  portada.titulo      = document.getElementById('p-tit').value;
+  portada.escrito_por = document.getElementById('p-esc').value || 'escrito por';
+  portada.autor       = document.getElementById('p-aut').value;
+  portada.contacto    = document.getElementById('p-con').value;
+  portada.registro    = document.getElementById('p-reg').value;
+  cerrarMod(); autoSave();
+  st('Portada guardada. Se incluira en la exportacion DOCX.');
+}
+
+/* ============================================================
+   CONTADORES
+   ============================================================ */
+function cntWords() {
+  const txt = cnv.innerText || '';
+  const n = txt.trim().split(/\s+/).filter(w=>w.length>0).length;
+  document.getElementById('wcount').textContent = n + ' palabras';
+}
+
+function st(msg) { document.getElementById('stmsg').textContent = msg; }
+
+function showSpin(msg) {
+  document.getElementById('spinmsg').textContent = msg||'Procesando...';
+  document.getElementById('spin').classList.add('on');
+}
+function hideSpin() { document.getElementById('spin').classList.remove('on'); }
+
+/* ============================================================
+   EXPORTAR DOCX
+   ============================================================ */
+async function exportarDOCX() {
+  showSpin('Generando DOCX — ' + formato.toUpperCase() + '...');
+  try { await _docx(); }
+  catch(err) { console.error(err); alert('Error DOCX: ' + err.message); }
+  hideSpin();
+}
+
+async function _docx() {
+  if (typeof docx === 'undefined') throw new Error('docx.js no disponible. Comprueba tu conexion a internet.');
+  const { Document, Packer, Paragraph, TextRun, AlignmentType,
+          PageNumber, NumberFormat, Header, SectionType } = docx;
+
+  const tw = n => Math.round(n * 1440); // pulgadas a twips
+
+  // Configuracion por formato
+  // Letter WGA: 1.5" izq, 1" der, 1" top, 1" bot
+  // A4 WGA equivalente: ~1.38" izq (3.5cm), ~0.98" der (2.5cm), ~0.98" top/bot
+  const C = formato === 'a4' ? {
+    pw: tw(8.27), ph: tw(11.69),
+    ml: tw(1.38), mr: tw(0.98), mt: tw(0.98), mb: tw(0.98),
+    iPersonaje: tw(2.0),
+    iDialL: tw(1.0), iDialR: tw(1.4),
+    iParL:  tw(1.5), iParR:  tw(1.4),
+  } : {
+    pw: tw(8.5),  ph: tw(11),
+    ml: tw(1.5),  mr: tw(1.0), mt: tw(1.0), mb: tw(1.0),
+    iPersonaje: tw(2.2),
+    iDialL: tw(1.0), iDialR: tw(1.5),
+    iParL:  tw(1.6), iParR:  tw(1.5),
+  };
+
+  const propPag = {
+    page: {
+      size: { width: C.pw, height: C.ph },
+      margin: { top: C.mt, right: C.mr, bottom: C.mb, left: C.ml }
+    }
+  };
+
+  // Recolectar todos los bloques
+  const bls = [];
+  cnv.querySelectorAll('.pagina').forEach(p => {
+    p.querySelectorAll('.bl').forEach(b => bls.push({t:b.dataset.t, tx:b.textContent}));
+  });
+
+  // Construir parrafos
+  const parrs = bls.map(b => {
+    const up = ['escena','personaje','transicion'].includes(b.t);
+    const txt = up ? b.tx.toUpperCase() : b.tx;
+    const run = new TextRun({ text: txt, font: 'Courier New', size: 24 });
+
+    switch(b.t) {
+      case 'escena':
+        return new Paragraph({ children:[run], spacing:{before:tw(0.166),after:0,line:240,lineRule:'auto'}, indent:{left:0,right:0}, alignment:AlignmentType.LEFT });
+      case 'accion':
+        return new Paragraph({ children:[run], spacing:{before:0,after:0,line:240,lineRule:'auto'}, indent:{left:0,right:0}, alignment:AlignmentType.LEFT });
+      case 'personaje':
+        return new Paragraph({ children:[run], spacing:{before:tw(0.166),after:0,line:240,lineRule:'auto'}, indent:{left:C.iPersonaje,right:0}, alignment:AlignmentType.LEFT });
+      case 'dialogo':
+        return new Paragraph({ children:[run], spacing:{before:0,after:0,line:240,lineRule:'auto'}, indent:{left:C.iDialL,right:C.iDialR}, alignment:AlignmentType.LEFT });
+      case 'acotacion':
+        return new Paragraph({ children:[new TextRun({text:'('+txt+')',font:'Courier New',size:24})], spacing:{before:0,after:0,line:240,lineRule:'auto'}, indent:{left:C.iParL,right:C.iParR}, alignment:AlignmentType.LEFT });
+      case 'transicion':
+        return new Paragraph({ children:[run], spacing:{before:tw(0.166),after:0,line:240,lineRule:'auto'}, indent:{left:0,right:0}, alignment:AlignmentType.RIGHT });
+      default:
+        return new Paragraph({ children:[run], spacing:{before:0,after:0,line:240,lineRule:'auto'} });
+    }
+  });
+
+  // Encabezados
+  const hdrNum   = new Header({ children:[new Paragraph({ alignment:AlignmentType.RIGHT, children:[new TextRun({children:[PageNumber.CURRENT,'.'],font:'Courier New',size:24})], spacing:{before:0,after:0} })] });
+  const hdrVacio = new Header({ children:[new Paragraph({ children:[] })] });
+
+  const secciones = [];
+
+  // Portada
+  if (portada.titulo) {
+    secciones.push({
+      properties: {...propPag},
+      headers: { default:hdrVacio, first:hdrVacio },
+      titlePage: true,
+      children: mkPortadaParrs(docx, tw, C),
+    });
+  }
+
+  // Guion
+  secciones.push({
+    properties: {
+      type: portada.titulo ? SectionType.NEXT_PAGE : undefined,
+      page: {
+        size:  propPag.page.size,
+        margin:propPag.page.margin,
+        pageNumbers: { start: portada.titulo ? 2 : 1, formatType: NumberFormat.DECIMAL }
+      }
+    },
+    headers: { default:hdrNum, first:hdrVacio },
+    titlePage: true,
+    children: parrs,
+  });
+
+  const doc  = new Document({ sections: secciones });
+  const blob = await Packer.toBlob(doc);
+  const nom  = ((portada.titulo||'guion').replace(/[^\w\s-]/g,'').trim() || 'guion')
+               + '_' + formato + '.docx';
+  saveAs(blob, nom);
+  st('DOCX exportado: ' + nom);
+}
+
+function mkPortadaParrs(docxLib, tw, C) {
+  const { Paragraph, TextRun, AlignmentType } = docxLib;
+  const ps = [];
+  const bl = (txt, align) => new Paragraph({
+    children:[new TextRun({text:txt||'',font:'Courier New',size:24})],
+    alignment: align || AlignmentType.LEFT,
+    spacing:{before:0,after:0,line:240}
+  });
+  const emp = () => bl('', AlignmentType.LEFT);
+
+  // Espacio superior (~1/3 de pagina)
+  for (let i=0;i<11;i++) ps.push(emp());
+
+  // Titulo
+  const tit = portada.titulo.toUpperCase();
+  const td  = tit.startsWith('"') ? tit : '"'+tit+'"';
+  ps.push(bl(td, AlignmentType.CENTER));
+  ps.push(emp());
+
+  // Escrito por / autor
+  ps.push(bl(portada.escrito_por||'escrito por', AlignmentType.CENTER));
+  if (portada.autor) ps.push(bl(portada.autor, AlignmentType.CENTER));
+
+  // Relleno hasta el pie
+  for (let i=0;i<22;i++) ps.push(emp());
+
+  // Pie: contacto izq / registro der
+  const cl = (portada.contacto||'').split('\n');
+  const rl = (portada.registro||'').split('\n');
+  const mx = Math.max(cl.length, rl.length, 1);
+  for (let i=0;i<mx;i++) {
+    ps.push(new Paragraph({
+      children:[
+        new TextRun({text:cl[i]||'',font:'Courier New',size:24}),
+        new TextRun({text:'\t',font:'Courier New',size:24}),
+        new TextRun({text:rl[i]||'',font:'Courier New',size:24}),
+      ],
+      tabStops:[{type:'right',position:tw(6.0)}],
+      spacing:{before:0,after:0,line:240}
+    }));
+  }
+  return ps;
+}
+</script>
+</body>
+</html>
