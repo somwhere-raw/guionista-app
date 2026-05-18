@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Guionista — Editor de Guiones</title>
+<title>Guionista - Editor de Guiones</title>
 
 <!-- Firebase SDK (compat) -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -729,12 +729,12 @@ const FIREBASE_CONFIG = {
    2. CONSTANTES WGA Y TIPOS DE PARRAFO
    ============================================================ */
 const TIPOS = {
-  escena:     { label: 'Escena',     upper: true,  paren: false, colon: false },
-  accion:     { label: 'Accion',     upper: false, paren: false, colon: false },
-  personaje:  { label: 'Personaje',  upper: true,  paren: false, colon: false },
+  escena:     { label: 'ESCENA',     upper: true,  paren: false, colon: false },
+  accion:     { label: 'Acción',     upper: false, paren: false, colon: false },
+  personaje:  { label: 'PERSONAJE',  upper: true,  paren: false, colon: false },
   dialogo:    { label: 'Dialogo',    upper: false, paren: false, colon: false },
-  acotacion:  { label: 'Acotacion',  upper: false, paren: true,  colon: false },
-  transicion: { label: 'Transicion', upper: true,  paren: false, colon: true  }
+  acotacion:  { label: '(Acotación)',  upper: false, paren: true,  colon: false },
+  transicion: { label: 'TRANSICIÓN', upper: true,  paren: false, colon: true  }
 };
 
 /* Secuencia de tipos por contexto:
