@@ -812,6 +812,9 @@ const state = {
    4. INICIALIZACION FIREBASE
    ============================================================ */
 try {
+  if (typeof firebase === 'undefined') {
+    throw new Error('SDK de Firebase no cargado. Verifica tu conexion o si algun bloqueador impide cargar gstatic.com.');
+  }
   firebase.initializeApp(FIREBASE_CONFIG);
   auth = firebase.auth();
   db   = firebase.firestore();
@@ -1085,43 +1088,56 @@ function showAuthModal() { $('auth-modal').classList.add('open'); }
 function hideAuthModal() { $('auth-modal').classList.remove('open'); }
 
 async function doSignInGoogle() {
+  if (!FB_READY || !auth) {
+    const errEl = $('auth-error');
+    errEl.textContent = 'Firebase no esta listo. Recarga la pagina o comprueba tu conexion.';
+    errEl.classList.add('show');
+    return;
+  }
   const provider = new firebase.auth.GoogleAuthProvider();
   const errEl = $('auth-error');
   errEl.classList.remove('show');
   try {
-    await auth.signInWithPopup(provider);
-    hideAuthModal();
+    /* signInWithRedirect funciona en file:// y en entornos sin soporte de popups.
+       La pagina se redirige a Google y vuelve; el resultado se captura en init(). */
+    await auth.signInWithRedirect(provider);
   } catch(e) {
-    if (e.code !== 'auth/cancelled-popup-request' && e.code !== 'auth/popup-closed-by-user') {
-      errEl.textContent = tradAuthError(e.code);
-      errEl.classList.add('show');
-    }
+    errEl.textContent = tradAuthError(e.code);
+    errEl.classList.add('show');
   }
 }
 
 async function doSignInApple() {
+  if (!FB_READY || !auth) {
+    const errEl = $('auth-error');
+    errEl.textContent = 'Firebase no esta listo. Recarga la pagina o comprueba tu conexion.';
+    errEl.classList.add('show');
+    return;
+  }
   const provider = new firebase.auth.OAuthProvider('apple.com');
   provider.addScope('email');
   provider.addScope('name');
   const errEl = $('auth-error');
   errEl.classList.remove('show');
   try {
-    await auth.signInWithPopup(provider);
-    hideAuthModal();
+    await auth.signInWithRedirect(provider);
   } catch(e) {
-    if (e.code !== 'auth/cancelled-popup-request' && e.code !== 'auth/popup-closed-by-user') {
-      errEl.textContent = tradAuthError(e.code);
-      errEl.classList.add('show');
-    }
+    errEl.textContent = tradAuthError(e.code);
+    errEl.classList.add('show');
   }
 }
 
 function tradAuthError(code) {
   const map = {
-    'auth/popup-blocked':                          'Popup bloqueado. Permite ventanas emergentes para este sitio.',
-    'auth/account-exists-with-different-credential': 'Ya existe una cuenta con este email usando otro metodo de inicio de sesion.',
-    'auth/network-request-failed':                 'Error de red. Comprueba tu conexion.',
-    'auth/internal-error':                         'Error interno. Intentalo de nuevo.',
+    'auth/popup-blocked':                             'Popup bloqueado. Permite ventanas emergentes para este sitio.',
+    'auth/account-exists-with-different-credential':  'Ya existe una cuenta con este email usando otro metodo de inicio de sesion.',
+    'auth/network-request-failed':                    'Error de red. Comprueba tu conexion a internet.',
+    'auth/internal-error':                            'Error interno de Firebase. Intentalo de nuevo.',
+    'auth/operation-not-supported-in-this-environment': 'Entorno no compatible con autenticacion. Abre el archivo desde un servidor HTTP/HTTPS (Firebase Hosting, Netlify, etc.), no desde file://.',
+    'auth/unauthorized-domain':                       'Dominio no autorizado en Firebase. Ve a Authentication > Dominios autorizados en la consola de Firebase y agrega tu dominio.',
+    'auth/user-disabled':                             'Esta cuenta ha sido deshabilitada.',
+    'auth/too-many-requests':                         'Demasiados intentos. Espera unos minutos.',
+    'auth/redirect-cancelled-by-user':                'Autenticacion cancelada.',
   };
   return map[code] || ('Error inesperado: ' + code);
 }
@@ -2444,7 +2460,26 @@ function saveCoverModal() {
 function init() {
   bindUIEvents();
 
+  /* Advertencia si el archivo se esta abriendo como file:// */
+  if (window.location.protocol === 'file:') {
+    const notice = $('no-session-notice');
+    notice.style.display = '';
+    notice.style.color   = '#f5a97a';
+    notice.textContent   = '⚠ Estas abriendo el archivo directamente (file://). La autenticacion y el guardado en la nube requieren que el archivo este servido desde un servidor HTTP/HTTPS (Firebase Hosting, Netlify, etc.).';
+  }
+
   if (FB_READY) {
+    /* Captura el resultado de signInWithRedirect al volver de Google/Apple */
+    auth.getRedirectResult().then(result => {
+      if (result && result.user) {
+        hideAuthModal();
+      }
+    }).catch(e => {
+      if (e.code && e.code !== 'auth/no-auth-event') {
+        console.warn('getRedirectResult error:', e.code, e.message);
+      }
+    });
+
     auth.onAuthStateChanged(onAuthStateChanged);
   } else {
     /* Modo sin Firebase: solo edicion local */
