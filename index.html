@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="format-detection" content="telephone=no, date=no, email=no, address=no"/>
 <title>Guionista — Editor de Guiones</title>
+
+<!-- Favicons & Web App Icons -->
+<link rel="icon" type="image/x-icon" href="favicon.ico"/>
+<link rel="icon" type="image/svg+xml" href="favicon.svg"/>
+<link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png"/>
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png"/>
+<link rel="manifest" href="site.webmanifest"/>
 
 <!-- Firebase SDK (compat) -->
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -66,6 +74,22 @@
   --lh: 16px;  /* line-height exacta: 12pt = 16px a 96dpi */
 }
 
+/* Suprimir autorrelleno del navegador en todos los inputs */
+input, textarea {
+  autocomplete: off;
+}
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-side) inset !important;
+  -webkit-text-fill-color: var(--text) !important;
+  box-shadow: 0 0 0 1000px var(--bg-side) inset !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 html, body { height: 100%; background: var(--bg); color: var(--text);
              font-family: var(--font-ui); font-size: 13px; overflow: hidden; }
 
@@ -87,7 +111,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 
 .brand {
   font-family: var(--font-ui);
-  font-size: 11px; font-weight: 600;
+  font-size: 13px; font-weight: 600;
   letter-spacing: .2em; text-transform: uppercase;
   color: var(--accent); white-space: nowrap;
   margin-right: 6px;
@@ -95,22 +119,439 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
 
 .tsep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex-shrink: 0; }
 
+/* ============================================================
+   PANEL FORMATO VERTICAL (izquierda de la hoja)
+   ============================================================ */
+#fmt-popup {
+  position: fixed;
+  z-index: 600;
+  background: #181818;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 10px;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.65), 0 2px 6px rgba(0,0,0,.3);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-8px) scale(.95);
+  transition: opacity .18s ease, transform .18s cubic-bezier(.4,0,.2,1);
+  min-width: 42px;
+  user-select: none;
+  will-change: left, top, transform, opacity;
+}
+#fmt-popup.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+
+/* Botones del panel de formato */
+.fmtbtn {
+  width: 34px; height: 34px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #c0c0c0;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  position: relative;
+  transition: background .14s, border-color .14s, color .14s, transform .1s;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 1;
+}
+.fmtbtn:hover  { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.16); color: #fff; transform: scale(1.06); }
+.fmtbtn:active { transform: scale(.95); }
+.fmtbtn.active { color: var(--accent); background: var(--accent-bg); border-color: rgba(184,149,74,.4); }
+
+.fmtbtn.fmt-b  { font-weight: 700; }
+.fmtbtn.fmt-i  { font-style: italic; }
+.fmtbtn.fmt-u  { text-decoration: underline; }
+.fmtbtn.fmt-s  { text-decoration: line-through; color: #a0a0a0; }
+.fmtbtn.fmt-case {
+  font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: -.5px;
+}
+
+/* Separador entre grupos */
+.fmt-divider {
+  width: 26px; height: 1px;
+  background: rgba(255,255,255,.1);
+  margin: 2px 0;
+  flex-shrink: 0;
+  border-radius: 1px;
+}
+
+/* Botones de color (texto y resaltado) */
+.fmt-color-btn {
+  width: 34px; height: 34px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #c0c0c0;
+  cursor: pointer;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 2px;
+  position: relative;
+  transition: background .14s, border-color .14s, color .14s, transform .1s;
+  flex-shrink: 0;
+  padding: 0;
+}
+.fmt-color-btn:hover  { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.16); color: #fff; transform: scale(1.06); }
+.fmt-color-btn:active { transform: scale(.95); }
+#btn-color-bg.active {
+  animation: hlTabPulse .8s ease-out 1;
+}
+@keyframes hlTabPulse {
+  0%   { transform: scale(.98); }
+  45%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.fmt-color-btn .fmt-icon-letter {
+  font-family: var(--font-ui); font-size: 14px; font-weight: 700; line-height: 1;
+}
+.fmt-color-btn .fmt-icon-svg { line-height: 0; }
+.fmt-color-bar {
+  width: 20px; height: 3px; border-radius: 2px; flex-shrink: 0;
+  transition: background .15s;
+}
+/* Input color oculto */
+.fmt-color-btn input[type="color"] {
+  position: absolute; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none; top: 0; left: 0;
+}
+
+/* Panel flotante para color de texto */
+#fmt-text-palette {
+  position: fixed;
+  z-index: 700;
+  background: #181818;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.65), 0 2px 6px rgba(0,0,0,.3);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: fit-content;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-8px) scale(.95);
+  transition: opacity .18s ease, transform .18s cubic-bezier(.4,0,.2,1);
+  will-change: left, top, transform, opacity;
+  user-select: none;
+}
+#fmt-text-palette.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+.fmt-text-palette-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.fmt-text-palette-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.09);
+  background: rgba(255,255,255,.03);
+}
+#fmt-text-palette input[type="color"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 46px;
+  height: 32px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 8px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+#fmt-text-palette input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 4px;
+}
+#fmt-text-palette input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+#fmt-text-palette input[type="color"]::-moz-color-swatch {
+  border: none;
+  border-radius: 5px;
+}
+.fmt-text-palette-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: .02em;
+}
+.fmt-text-palette-preview-dot {
+  width: 14px; height: 14px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.2);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.25);
+  background: #e53935;
+}
+#color-text-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Menu de capitalización */
+#fmt-case-menu {
+  position: fixed;
+  z-index: 700;
+  background: #181818;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.65);
+  /* Siempre display:flex — igual que los otros paneles flotantes;
+     la visibilidad se controla con opacity/transform para que
+     las transiciones CSS funcionen correctamente */
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 240px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-8px) scale(.95);
+  transition: opacity .18s ease, transform .18s cubic-bezier(.4,0,.2,1);
+  will-change: left, top, transform, opacity;
+  user-select: none;
+}
+#fmt-case-menu.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+.fmt-case-item {
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: #c0c0c0;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background .12s, color .12s;
+  white-space: nowrap;
+}
+.fmt-case-item:hover { background: rgba(255,255,255,.09); color: #ffffff; }
+.fmt-case-item:active { background: rgba(255,255,255,.15); }
+
+/* ============================================================
+   PALETA DE RESALTADO (12 colores fijos + Sin color)
+   ============================================================ */
+#fmt-hl-palette {
+  position: fixed;
+  z-index: 700;
+  background: #181818;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 10px;
+  padding: 7px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.65), 0 2px 6px rgba(0,0,0,.3);
+  /* Siempre display:grid — igual que #fmt-popup nunca usa display:none
+     para que las transiciones CSS funcionen correctamente */
+  display: grid;
+  grid-template-columns: repeat(4, 22px);
+  gap: 4px;
+  width: fit-content;
+  opacity: 0;
+  pointer-events: none;
+  /* Misma animacion de entrada que #fmt-popup */
+  transform: translateX(-8px) scale(.95);
+  transition: opacity .18s ease, transform .18s cubic-bezier(.4,0,.2,1);
+  will-change: left, top, transform, opacity;
+  user-select: none;
+}
+#fmt-hl-palette.open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0) scale(1);
+}
+
+.hl-swatch {
+  width: 22px; height: 22px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,.18);
+  transition: transform .1s, box-shadow .1s;
+  flex-shrink: 0;
+}
+.hl-swatch:hover {
+  transform: scale(1.18);
+  box-shadow: 0 0 0 2px rgba(255,255,255,.45);
+  z-index: 1;
+}
+.hl-swatch:active { transform: scale(.94); }
+.hl-swatch.hl-empty {
+  border-color: transparent;
+  pointer-events: none;
+  background: transparent !important;
+}
+
+/* Fila "Sin color" — ocupa toda la cuarta fila */
+.hl-no-color {
+  grid-column: 1 / -1;
+  height: 24px;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 4px;
+  background: transparent;
+  color: #b0b0b0;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+  /* Patron ajedrez para indicar "transparente" */
+  background-image:
+    linear-gradient(45deg, rgba(255,255,255,.06) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,.06) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.06) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.06) 75%);
+  background-size: 6px 6px;
+  background-position: 0 0, 0 3px, 3px -3px, -3px 0px;
+}
+.hl-no-color:hover {
+  background-color: rgba(255,255,255,.09);
+  border-color: rgba(255,255,255,.4);
+  color: #ffffff;
+}
+
+/* BARRA DE ESTADO ------------------------------------------ */
+#status-bar {
+  height: 26px;
+  background: var(--bg-tb);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 16px;
+  justify-content: space-between;
+  flex-shrink: 0;
+  user-select: none;
+  z-index: 10;
+}
+#status-type {
+  display: flex; align-items: center; gap: 7px;
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+#status-type.visible { opacity: 1; }
+#status-type-dot {
+  display: inline-block; width: 7px; height: 7px;
+  border-radius: 2px; background: #aaaaaa; flex-shrink: 0;
+  transition: background .15s ease;
+}
+#status-type-label {
+  font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; font-family: var(--font-ui); font-weight: 600;
+  color: var(--accent);
+  transition: color .15s ease;
+}
+#status-page {
+  font-size: 10px; color: var(--text-dim); letter-spacing: .05em;
+}
+
 .tbtn {
   height: 28px; padding: 0 9px;
   background: transparent;
   border: 1px solid transparent; border-radius: 3px;
   color: var(--text); font-family: var(--font-ui); font-size: 12px;
   cursor: pointer; white-space: nowrap;
-  transition: background .12s, border-color .12s, color .12s;
+  transition: background .18s ease, border-color .18s ease, color .18s ease,
+              transform .15s ease, box-shadow .18s ease, opacity .18s ease;
   display: flex; align-items: center; gap: 5px;
+  position: relative; overflow: hidden;
 }
-.tbtn:hover  { background: rgba(255,255,255,.07); border-color: var(--border); }
+.tbtn::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at var(--rx,50%) var(--ry,50%),
+              rgba(255,255,255,.13) 0%, transparent 70%);
+  opacity: 0; transition: opacity .3s ease; pointer-events: none;
+}
+.tbtn:hover::after { opacity: 1; }
+.tbtn:hover  { background: rgba(255,255,255,.07); border-color: var(--border); transform: translateY(-1px); }
+.tbtn:active { transform: translateY(0) scale(.97); }
 .tbtn.active { color: var(--accent); border-color: rgba(184,149,74,.35); background: var(--accent-bg); }
+.tbtn.active:hover { box-shadow: 0 0 10px rgba(184,149,74,.2); }
 .tbtn:disabled { opacity: .3; cursor: default; pointer-events: none; }
 .tbtn.fmt { font-family: 'Courier New', Courier, monospace; font-size: 13px; min-width: 28px; justify-content: center; }
 .tbtn.fmt-b { font-weight: bold; }
 .tbtn.fmt-i { font-style: italic; }
 .tbtn.fmt-u { text-decoration: underline; }
+
+/* fmt-group se eliminó del toolbar; ahora es un popup flotante (#fmt-popup) */
+
+/* Botones de accion con icono SVG */
+.tbtn-icon {
+  height: 28px; padding: 0 8px; background: transparent;
+  border: 1px solid transparent; border-radius: 3px;
+  color: var(--text); font-family: var(--font-ui); font-size: 11px;
+  cursor: pointer; white-space: nowrap;
+  transition: background .18s ease, border-color .18s ease, color .18s ease,
+              transform .15s ease, box-shadow .18s ease;
+  display: flex; align-items: center; gap: 5px;
+  position: relative; overflow: hidden; flex-shrink: 0;
+}
+.tbtn-icon::after {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(circle at var(--rx,50%) var(--ry,50%),
+              rgba(255,255,255,.12) 0%, transparent 70%);
+  opacity: 0; transition: opacity .3s ease; pointer-events: none;
+}
+.tbtn-icon:hover::after { opacity: 1; }
+.tbtn-icon:hover { background: rgba(255,255,255,.07); border-color: var(--border); transform: translateY(-1px); }
+.tbtn-icon:active { transform: translateY(0) scale(.96); }
+.tbtn-icon.active { color: var(--accent); border-color: rgba(184,149,74,.35); background: var(--accent-bg); }
+.tbtn-icon svg { flex-shrink: 0; }
+
+/* Botón portada — pulso cuando tiene datos */
+#btn-cover.has-cover {
+  border-color: rgba(184,149,74,.4); color: var(--accent); background: var(--accent-bg);
+  animation: coverPulse 3s ease-in-out infinite;
+}
+@keyframes coverPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(184,149,74,0); }
+  50%     { box-shadow: 0 0 8px 2px rgba(184,149,74,.2); }
+}
+#btn-cover.has-cover:hover { animation: none; box-shadow: 0 0 14px 3px rgba(184,149,74,.3); }
+
+/* Botón auth */
+#btn-auth {
+  background: linear-gradient(90deg, rgba(184,149,74,.14) 0%, rgba(184,149,74,.04) 50%, rgba(184,149,74,.14) 100%);
+  background-size: 200% 100%; border-color: rgba(184,149,74,.25); color: var(--accent);
+  animation: authShimmer 3.5s ease infinite;
+}
+#btn-auth:hover { animation: none; background: rgba(184,149,74,.22); border-color: rgba(184,149,74,.5); box-shadow: 0 0 10px rgba(184,149,74,.22); transform: translateY(-1px); }
+#btn-auth.logged-in { background: transparent; border-color: transparent; color: var(--text); animation: none; }
+#btn-auth.logged-in:hover { background: rgba(255,255,255,.07); border-color: var(--border); box-shadow: none; }
+@keyframes authShimmer {
+  0%,100% { background-position: 0% 0%; }
+  50%     { background-position: 100% 0%; }
+}
+
+/* Botón exportar */
+#btn-export { border-color: rgba(100,160,255,.2); color: #8bbff5; }
+#btn-export:hover { background: rgba(100,160,255,.09); border-color: rgba(100,160,255,.4); color: #aad0ff; box-shadow: 0 0 10px rgba(100,160,255,.15); }
 
 .tselect {
   height: 28px; padding: 0 7px;
@@ -129,10 +570,25 @@ html, body { height: 100%; background: var(--bg); color: var(--text);
   display: flex; align-items: center; gap: 8px;
   white-space: nowrap; min-width: 130px; flex-shrink: 0;
   cursor: default;
+  /* Animacion: oculto por defecto */
+  opacity: 0;
+  transform: translateY(-4px) scale(0.97);
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease, border-color .2s ease;
+  will-change: opacity, transform;
+}
+#type-indicator.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
 }
 #type-indicator-label {
   color: var(--accent); font-size: 10px; letter-spacing: .1em;
   text-transform: uppercase; font-family: var(--font-ui); font-weight: 600;
+  transition: color .15s ease;
+}
+#type-indicator-dot {
+  transition: background .15s ease;
 }
 
 /* Placeholder / guia visible en párrafos vacíos */
@@ -223,14 +679,35 @@ body.dark-sheet .script-line[data-empty="true"][data-ph]::before {
 #user-label { font-size: 11px; color: var(--text-dim); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* BODY ----------------------------------------------------- */
-#body { display: flex; flex: 1; overflow: hidden; }
+#body { flex: 1; overflow: hidden; position: relative; }
 
-/* SIDEBAR -------------------------------------------------- */
-#sidebar {
-  width: 210px; background: var(--bg-side);
-  border-right: 1px solid var(--border);
-  display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden;
+/* SIDEBAR — overlay deslizante ----------------------------- */
+#sidebar-backdrop {
+  display: none;
+  position: fixed; inset: 0; z-index: 49;
+  background: rgba(0,0,0,.45);
+  opacity: 0;
+  transition: opacity .25s ease;
 }
+#sidebar-backdrop.open { display: block; opacity: 1; }
+
+#sidebar {
+  width: 230px; background: var(--bg-side);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; overflow: hidden;
+  position: fixed;
+  top: 42px; left: 0; bottom: 0;
+  z-index: 50;
+  transform: translateX(-100%);
+  transition: transform .28s cubic-bezier(.4,0,.2,1),
+              box-shadow .28s ease;
+  box-shadow: none;
+}
+#sidebar.open {
+  transform: translateX(0);
+  box-shadow: 6px 0 28px rgba(0,0,0,.55);
+}
+
 .side-header {
   padding: 10px 12px 8px;
   font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
@@ -263,8 +740,29 @@ body.dark-sheet .script-line[data-empty="true"][data-ph]::before {
 
 .side-empty { padding: 20px 12px; font-size: 11px; color: var(--text-dim); text-align: center; line-height: 1.7; }
 
+/* Botón toggle sidebar en toolbar */
+#btn-sidebar-toggle {
+  height: 28px; width: 32px; padding: 0;
+  background: transparent; border: 1px solid transparent; border-radius: 3px;
+  color: var(--text); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column; gap: 4px; flex-shrink: 0;
+  transition: background .12s, border-color .12s;
+}
+#btn-sidebar-toggle:hover { background: rgba(255,255,255,.07); border-color: var(--border); }
+#btn-sidebar-toggle.active { background: var(--accent-bg); border-color: rgba(184,149,74,.35); }
+#btn-sidebar-toggle span {
+  display: block; width: 14px; height: 1.5px;
+  background: currentColor; border-radius: 2px;
+  transition: transform .22s ease, opacity .22s ease, width .22s ease;
+  transform-origin: center;
+}
+#btn-sidebar-toggle.active span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+#btn-sidebar-toggle.active span:nth-child(2) { opacity: 0; width: 0; }
+#btn-sidebar-toggle.active span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+
 /* MAIN AREA ------------------------------------------------ */
-#main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#main-area { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
 
 #no-session-notice {
   display: none;
@@ -276,8 +774,8 @@ body.dark-sheet .script-line[data-empty="true"][data-ph]::before {
 
 #editor-area {
   flex: 1; overflow-y: auto; overflow-x: auto;
-  display: flex; flex-direction: column; align-items: center;
-  padding: 28px 24px; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  padding: 36px 24px 60px; background: var(--bg);
 }
 #editor-area::-webkit-scrollbar { width: 7px; }
 #editor-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,.09); border-radius: 4px; }
@@ -285,7 +783,13 @@ body.dark-sheet .script-line[data-empty="true"][data-ph]::before {
 /* ============================================================
    HOJA DE GUION — PAGINAS
    ============================================================ */
-#pages-container { display: flex; flex-direction: column; gap: 20px; align-items: center; width: 100%; }
+#pages-container {
+  display: flex; flex-direction: column; gap: 24px;
+  align-items: center;
+  width: 100%;
+  /* Centrado real: las páginas quedan siempre en el centro del viewport */
+  margin: 0 auto;
+}
 
 .page {
   width: var(--page-w);
@@ -582,27 +1086,28 @@ body.dark-sheet .script-line:focus { background: rgba(184,149,74,.06); }
 <div id="app">
   <!-- ===================== TOOLBAR ===================== -->
   <div id="toolbar">
+    <button id="btn-sidebar-toggle" title="Mostrar/ocultar guiones" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+        <img src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAC0ALQDASIAAhEBAxEB/8QAHQABAAIBBQEAAAAAAAAAAAAAAAcIBgECBAUJA//EAEIQAAEDAwIDBQQGBwYHAAAAAAABAgMEBQYHEQgxQRITIVFhFCJxoUJSgZGxwRUWIzJDRGIXJjNygqIkNFNjkrLC/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AKZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATHhvDnqHlGm9XmlHRshjY3vKOilRUnrGJ+85idPTf97oBDgN88MtPO+CeN8Usbla9j02VqpzRUNgAAAAAAAAAAAAAAAAAAAAAAAAA1a1XORrUVXKuyInU308MtROyCCN8ssjkaxjE3VyryRELt8KnDVFZWUuaagUbJbiqJJRW2RN2wdUfInV39PTqBjnCnw0OrFpc21Do1bTeEtDa5E2WTqj5U6N8m9epc1EZFG2ONjWMYiNa1qbIiJyRENz3bJshx5XgVk4s+H2HKoqjNMMpWRX1jVfWUcabJWInNzU/6n/t8edGp4Zaed8E8bo5Y3K17HJsrVTmioeusshWPip0GhyiKozDD6ZsV7Yivq6RibJVonNzU+v+Px5hSMG+eKWCZ8M0bo5GOVr2OTZWqnNFQ2AAAAAAAAAAAAAAAAAAAAOTa6Ctulxgt1upZaqrqHpHFDE3tOe5eSIhysXsF3ye+0tksVDNXV9U9GRQxN3VfVfJE8z0M4Z9ALRpdbo7xd2w3HKp2ftJ9t2UqL9CP83dfgB0PC3w5UOC09PlWYQRVmSPaj4YHIjo6Lf8X+vQsW9xq9xCnEVrzZdLKVlFTxR3S/zJvHR9vZsbfrSKnJPQCYpHnEmkIX4bddP7WI7jRV1rjt10oWJK9sT1dG+NV23TfxRdyXZpOYGk0p19ZURxRvlle1jGIrnOcuyIic1VTfUTIiKqqiInmU84rNb1uMlRhGJ1a+yNVWXCrjd/ir1jav1fNeoEa8TuSYnk2plTWYpRMijjTu6mqZ4Nq5UXxeifLfrzIsAAAAAAAAAAAAAAAAAAGQaf4dkGdZNTY/jlC+rrJ18dk9yNvV716NTzOw0m06yTUvKYrFjtKr1VUWoqXIvdU7OrnL+Cc1PSLRLSjGtKsZbbbPCktbK1FrK57U7yd/x6N8kA6jh70Ux7SaxJ3TWV1+qGJ7ZcHN8VX6jPqtT59SUpHGr3EHcTuutt0vs7rZbXxVmU1Ue9PT77tpmrylk/JvX4AacTmult0xs7rZbHxVeT1Uf7CDfdKdF/iP8AyTqUBRMkz7Mf5m7Xq5z+rnPcq/JE+5ENETJc9zH+avF8uk/Xdz5HqvyRPuRC+HDpotbNMbM2ur2xVmSVLE9oqNt0hRf4bPTzXqB9eHDSKl0txySWqkbUX2vY32yVP3WJzSNvonn1JPnlNZ5Su3FJrXHidFLi2N1DX32oZtPK1d/ZGL/9r8gOi4rdb/YI6jCcTq0Wreisr6uN3+EnWNq+fmpURyq5VVVVVXxVVN00sk8z5pnukke5XOc5d1VV5qpsAAAAAAAAAAAAAAAAAA+tJTVFXUMp6WCWeZ6o1kcbVc5y+SInMnTTHhX1My9Iqu60seMW5+y97cEXvlT+mFPe/wDLs/ECwnAvm+B1+DNxS0UFPaMhpW9uthV276z/ALzXL4u9U+j8CyL3Hl7qXgmbaF6hU7vapoZoJO+tt1pkVrJkTqnkvRWrv9qE/O4xIF0m7aW1f1427ju+wvsyLt/zG/l/Rz39PFQlTid11tul1ndbLY6Gtyqrj3p6dV3bTNXlLIn4N6/A8/f7y55mP83eb7daj/NJK934J8kROiIP7y55mP8AN3m+3Wo/zSSvd+CfJEToiF8uHHRS2aXWVLhcEhrcoq49qmpRN207V/hRenm7m5fTZANOHPRW2aYWVK6vSGsyaqj/AOJqUTdsCL/Dj9PNevwJWml5m6eXmRPr/qxbtNscc9FZUXqqaraKl35r9d3k1PnyA6fiV1kpdP7O612uWObIqti9yzfdKdq/xHfknUolca2quNdNXV08lRUzvV8sj13c5y81U5GQ3i5ZBeqq8Xeqkqq2qkWSWR6+Kqv4J5IdeAAAAAAAAAAAAAAAAALU6CcJkmX47bcry++OobdXRpNDRUjN53sVfDtOd4N35+CO8FK44HYajKM0s+PUje1NcKyOnb4fWcibnrfaKGmtNoo7XRt7FNRwMgib5MY1Gp8kAxXTrSzAtPqdrMXx2kpZ0TZ1W9veVD/jI7dfsTZPQy97j519XT0dLLVVU0cEETVfJI92zWonNVUiqm4hNJau/pZYcupfaHP7DXua5Ildy2R6psBlWqOEY/qFitRj2Q0qSwSJvFKiftIH9HsXoqfM83Na9L79pflUlqusay0ciq6jrWt9ydnn6KnVD1AWdkkbZI3o5jk3a5F3RUMR1Ow2w59i9RYL/SpLBIm8ciJ78L+j2r0VPmBW7gMdp+2jru72/XX3u9Wo237jfw7n05drrv6bFqJ5Dze1IwzLNF9QIexVSwSRSLNbbjCuyStReaevjsrV8/JSyeCcTOO1+ndVc8mc2lvtuiRJaSP+bdya6L4rzT6Pw8QJK1n1Js+nOLyXS4PSWrkRWUdIjvemf5eiJ1U8+M3yi8ZjklVfr5Uunq6h2+30Y29GNTo1Dm6nZxes/wApnvt5mXdyq2CBq+5BH0a3816qYuAAAAAAAAAAAAAAAAAAAFjuADE/03rBLkE8XaprFSOlRVTw75/uMT47K5f9J6BPcV44CcU/QGjLr5NF2am/Vbp91Tx7mPdjE+9Hr9pIOueq1h0uxZ9zucjZq6VFbRUTXe/M/wDJqdVAjfj2yZ1r0jbaKW5Mp6m41TGPhR+0kkSeLtk8vM8/SSJ5c7161P3XvKyvqn+CJv3NJFv/ALWp8y02K8KGAWtaGpvFRXXOoha1ZmOk7MUj05+CdPQDNeFqtu1VoVj0t5dI6funNjdJv2liRdmL4+hIs8vqfKCKnoqSKkpIWQwQsRkcbE2a1qckRDDdX8uiwzT675A96JJTwKlOi/Sld4MT71RfgigU64xs1/WnVWW2U0vboLGz2SPZfBZd95Hff7v+lCEz61lRLV1c1VO9z5Znq97lXdVVV3VT5AAAAAAAAAAAAAAAAAAAAObY7dU3i9UNpoo1kqa2oZTwsT6T3uRqJ96nCM40QyGzYhqBS5beoXVTLPG+qpaVvOoqUTsxN36IjnI9V8mL18AL+6h51i+hGldtop3tlmo6NlJbqJi7PqHMYib7dE38VX1KJTzZ5r1qhuveVtwq3+61N+5pIt/9rU+ZpUT57r3qkir26651jvdam6Q0cKL/ALWN3+31VS7mmOF4PodhiRVd0oKWqlajq241crY3TvTom6/up0agHY6J6XWLS7GGW+3sbPcJmo6trXN9+V3knk1OiGbTSkGZ1xTac2Ttw2h9Xf6lvgns7O7i39Xu8fuRSCM34qc8vPbhsVPRWKB3gjo297Lt6ud4b+qIgF07vc6K30zqmvrKekhbzkmkRjU+1SnnGPqfasm/R2L45c4q2jgctRVyQrux0nJrd+uybr4eZBGR5TkeRVLqm+XquuEi9Z5nO+R0wAAAAAAAAAAAAAAAAAAAAAAAAGb4hqjlWHWCa04nPT2Zald6qsp4UWpn8kWR26tROiN7P37qYvebzdr1WPrLvc6yvqH+LpaiZ0jl+1VOAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP/2Q==" alt="logo" style="height:24px;width:24px;object-fit:contain;border-radius:4px;flex-shrink:0;"/>
     <span class="brand">Guionista</span>
-    <div class="tsep"></div>
 
-    <!-- Indicador de tipo (reemplaza al select) -->
-    <div id="type-indicator" title="Tipo de párrafo actual">
-      <span id="type-indicator-dot" style="display:inline-block;width:8px;height:8px;border-radius:2px;background:#aaaaaa;flex-shrink:0;"></span>
-      <span id="type-indicator-label">Acción</span>
-    </div>
-
-    <div class="tsep"></div>
-
-    <button id="btn-bold"      class="tbtn fmt fmt-b" title="Negrita (Ctrl+B)">N</button>
-    <button id="btn-italic"    class="tbtn fmt fmt-i" title="Cursiva (Ctrl+I)">I</button>
-    <button id="btn-underline" class="tbtn fmt fmt-u" title="Subrayado (Ctrl+U)">S</button>
-
-    <div class="tsep"></div>
-
-    <button id="btn-scene-nums"  class="tbtn" title="Numeración de escenas">Nums</button>
-    <button id="btn-dark-sheet"  class="tbtn" title="Modo oscuro de hoja">Hoja oscura</button>
-    <button id="btn-cover"       class="tbtn" title="Portada del guion">Portada</button>
-    <button id="btn-export"      class="tbtn" title="Exportar a DOCX">Exportar DOCX</button>
+    <button id="btn-cover" class="tbtn-icon" title="Portada del guion">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="3"/></svg>
+      Portada
+    </button>
+    <button id="btn-scene-nums" class="tbtn-icon" title="Numeración de escenas">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>
+      Nums
+    </button>
+    <button id="btn-dark-sheet" class="tbtn-icon" title="Modo oscuro de hoja">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      Oscuro
+    </button>
+    <button id="btn-export" class="tbtn-icon" title="Exportar a DOCX">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      DOCX
+    </button>
 
     <div id="toolbar-title">(sin guion)</div>
 
@@ -617,6 +1122,8 @@ body.dark-sheet .script-line:focus { background: rgba(184,149,74,.06); }
 
   <!-- ===================== BODY ===================== -->
   <div id="body">
+    <!-- Backdrop del sidebar -->
+    <div id="sidebar-backdrop"></div>
 
     <!-- SIDEBAR -->
     <div id="sidebar">
@@ -637,6 +1144,15 @@ body.dark-sheet .script-line:focus { background: rgba(184,149,74,.06); }
         <div id="pages-container"></div>
         <!-- Buffer oculto para medir alturas de parrafos -->
         <div id="para-pool"></div>
+      </div>
+
+      <!-- BARRA DE ESTADO -->
+      <div id="status-bar">
+        <div id="status-type">
+          <span id="status-type-dot"></span>
+          <span id="status-type-label">—</span>
+        </div>
+        <span id="status-page"></span>
       </div>
     </div>
   </div>
@@ -677,23 +1193,23 @@ body.dark-sheet .script-line:focus { background: rgba(184,149,74,.06); }
     <h2>Portada del guion</h2>
     <div class="form-group">
       <label>Titulo</label>
-      <input type="text" id="cv-titulo" placeholder="Titulo del guion"/>
+      <input type="text" id="cv-titulo" placeholder="Titulo del guion" autocomplete="off"/>
     </div>
     <div class="form-group">
       <label>Autor(es)</label>
-      <input type="text" id="cv-autor" placeholder="Nombre del autor"/>
+      <input type="text" id="cv-autor" placeholder="Nombre del autor" autocomplete="off"/>
     </div>
     <div class="form-group">
       <label>Basado en (opcional)</label>
-      <input type="text" id="cv-basado" placeholder="Basado en la novela de..."/>
+      <input type="text" id="cv-basado" placeholder="Basado en la novela de..." autocomplete="off"/>
     </div>
     <div class="form-group">
       <label>Contacto (direccion, telefono, email)</label>
-      <textarea id="cv-contacto" placeholder="Direccion, telefono, email"></textarea>
+      <textarea id="cv-contacto" placeholder="Direccion, telefono, email" autocomplete="off"></textarea>
     </div>
     <div class="form-group">
       <label>Registro WGA (opcional)</label>
-      <input type="text" id="cv-registro" placeholder="Numero de registro WGA u otros"/>
+      <input type="text" id="cv-registro" placeholder="Numero de registro WGA u otros" autocomplete="off"/>
     </div>
     <div class="form-group" style="display:flex;align-items:center;gap:10px;">
       <input type="checkbox" id="cv-mostrar" style="width:auto;height:auto;accent-color:var(--accent)"/>
@@ -710,6 +1226,82 @@ body.dark-sheet .script-line:focus { background: rgba(184,149,74,.06); }
 <div id="ctx-menu">
   <div class="ctx-item" id="ctx-rename">Cambiar nombre</div>
   <div class="ctx-item danger" id="ctx-delete">Eliminar guion</div>
+</div>
+
+<!-- ===================== PANEL FORMATO VERTICAL ===================== -->
+<div id="fmt-popup">
+  <!-- Negrita / Cursiva / Subrayado / Tachado -->
+  <button id="btn-bold"      class="fmtbtn fmt-b" title="Negrita (Ctrl+B)">B</button>
+  <button id="btn-italic"    class="fmtbtn fmt-i" title="Cursiva (Ctrl+I)">I</button>
+  <button id="btn-underline" class="fmtbtn fmt-u" title="Subrayado (Ctrl+U)">S</button>
+  <button id="btn-strike"    class="fmtbtn fmt-s" title="Tachado">S</button>
+
+  <div class="fmt-divider"></div>
+
+  <!-- Color de texto -->
+  <button id="btn-color-text" class="fmt-color-btn" title="Color de texto">
+    <span class="fmt-icon-letter">A</span>
+    <span id="color-text-bar" class="fmt-color-bar" style="background:#e53935"></span>
+  </button>
+
+  <!-- Resaltado -->
+  <button id="btn-color-bg" class="fmt-color-btn" title="Resaltar texto">
+    <span class="fmt-icon-svg">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+    </span>
+    <span id="color-bg-bar" class="fmt-color-bar" style="background:#ffeb3b"></span>
+  </button>
+
+  <div class="fmt-divider"></div>
+
+  <!-- Cambio de capitalización -->
+  <button id="btn-case" class="fmtbtn fmt-case" title="Mayúsculas / minúsculas">Aa</button>
+</div>
+
+<!-- Sub-menú de capitalización -->
+<div id="fmt-case-menu">
+  <button class="fmt-case-item" data-case="sentence">Tipo oración</button>
+  <button class="fmt-case-item" data-case="lower">minúscula</button>
+  <button class="fmt-case-item" data-case="upper">MAYÚSCULAS</button>
+  <button class="fmt-case-item" data-case="title">Poner En Mayúsculas Cada Palabra</button>
+  <button class="fmt-case-item" data-case="toggle">tIPO iNVERSo</button>
+</div>
+
+<!-- Paleta de resaltado: 4 col × 3 filas + fila "Sin color" -->
+<div id="fmt-hl-palette">
+  <!-- Fila 1 -->
+  <div class="hl-swatch" style="background:#FFFF00" data-color="#FFFF00" title="Amarillo"></div>
+  <div class="hl-swatch" style="background:#00FF00" data-color="#00FF00" title="Verde brillante"></div>
+  <div class="hl-swatch" style="background:#00FFFF" data-color="#00FFFF" title="Turquesa"></div>
+  <div class="hl-swatch" style="background:#FF00FF" data-color="#FF00FF" title="Rosa"></div>
+  <div class="hl-swatch" style="background:#FF0000" data-color="#FF0000" title="Rojo"></div>
+  <!-- Fila 2 -->
+  <div class="hl-swatch" style="background:#0000FF" data-color="#0000FF" title="Azul"></div>
+  <div class="hl-swatch" style="background:#000080" data-color="#000080" title="Azul oscuro"></div>
+  <div class="hl-swatch" style="background:#008080" data-color="#008080" title="Cian oscuro"></div>
+  <div class="hl-swatch" style="background:#008000" data-color="#008000" title="Verde oscuro"></div>
+  <div class="hl-swatch" style="background:#800080" data-color="#800080" title="Violeta"></div>
+  <!-- Fila 3 -->
+  <div class="hl-swatch" style="background:#800000" data-color="#800000" title="Rojo oscuro"></div>
+  <div class="hl-swatch" style="background:#000000" data-color="#000000" title="Negro"></div>
+
+  <!-- Fila 4: Sin color — ocupa las 5 columnas -->
+  <div class="hl-no-color" id="hl-no-color" title="Sin color">Sin color</div>
+</div>
+
+<!-- Panel flotante para color de texto -->
+<div id="fmt-text-palette" aria-label="Selector de color">
+  <div class="fmt-text-palette-body">
+    <div class="fmt-text-palette-picker">
+      <input type="color" id="color-text-input" value="#e53935">
+      <div class="fmt-text-palette-preview">
+        <span class="fmt-text-palette-preview-dot" id="color-text-dot"></span>
+        <span id="color-text-value">#e53935</span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -807,6 +1399,7 @@ const state = {
   scriptsUnsub:    null,    /* Listener de la lista de guiones del usuario */
   ctxScriptId:     null,    /* Para el menu contextual */
   isSaving:        false,
+  fmtLine:         null,
 };
 
 /* ============================================================
@@ -1351,13 +1944,8 @@ function listenScript(id) {
 }
 
 function getTituloFromEditor() {
-  /* Usa el titulo de la portada, o el texto de la primera escena */
-  if (state.cover.titulo.trim()) return state.cover.titulo.trim();
-  const firstScene = document.querySelector('.script-line[data-tipo="escena"]');
-  if (firstScene) {
-    const t = (firstScene.textContent || '').trim();
-    if (t) return t.substring(0, 60);
-  }
+  /* Usa siempre el titulo de la portada (campo "Titulo del guion") */
+  if (state.cover.titulo && state.cover.titulo.trim()) return state.cover.titulo.trim();
   return 'Sin titulo';
 }
 
@@ -1387,6 +1975,7 @@ function loadScriptData(data) {
   $('btn-dark-sheet').classList.toggle('active', state.darkSheet);
   $('btn-scene-nums').classList.toggle('active', state.sceneNumbers);
   $('toolbar-title').textContent = data.titulo || 'Sin titulo';
+  setTimeout(updateCoverBtn, 50);
 
   /* Poblar editor */
   const contenido = data.contenido || [{ id: uid(), tipo: 'escena', html: '' }];
@@ -1425,11 +2014,11 @@ function buildCoverPage() {
   const content = el('div', { className: 'page-content' });
   const block = el('div', { className: 'cover-block' });
 
-  const titleEl   = el('input', { type:'text', className:'cover-field cover-title-field', id:'cv-t', placeholder:'TITULO DEL GUION' });
+  const titleEl   = el('input', { type:'text', className:'cover-field cover-title-field', id:'cv-t', placeholder:'TITULO DEL GUION', autocomplete:'off' });
   const byEl      = el('div',   { className:'cover-field', style:'font-family:inherit;font-size:12pt;' });
   byEl.textContent = 'escrito por';
-  const authorEl  = el('input', { type:'text', className:'cover-field', id:'cv-a', placeholder:'Nombre del autor' });
-  const basadoEl  = el('input', { type:'text', className:'cover-field', id:'cv-b', placeholder:'(Basado en...)' });
+  const authorEl  = el('input', { type:'text', className:'cover-field', id:'cv-a', placeholder:'Nombre del autor', autocomplete:'off' });
+  const basadoEl  = el('input', { type:'text', className:'cover-field', id:'cv-b', placeholder:'(Basado en...)', autocomplete:'off' });
 
   block.appendChild(titleEl);
   block.appendChild(byEl);
@@ -1526,7 +2115,7 @@ function bindParaEvents(div) {
 function onParaFocus(e) {
   const div = e.currentTarget;
   const tipo = div.dataset.tipo;
-  updateTypeSelector(tipo);
+  if (tipo !== '__pagebreak__') updateTypeIndicator(tipo, true);
   syncParagraphState(div);
 }
 
@@ -1535,6 +2124,14 @@ function onParaBlur(e) {
   syncParagraphState(div);
   applyAutoFormat(div);
   updateSceneNumbers();
+  /* Ocultar indicador si el foco sale de la hoja */
+  setTimeout(() => {
+    const active = document.activeElement;
+    if (!active || !active.classList.contains('script-line')) {
+      showFormatGroup(false);
+      updateTypeIndicator(null, false);
+    }
+  }, 80);
 }
 
 function onParaInput(e) {
@@ -1599,9 +2196,9 @@ function onParaKeydown(e) {
 
   /* --- Ctrl+B / Ctrl+I / Ctrl+U: formato enriquecido --- */
   if (e.ctrlKey || e.metaKey) {
-    if (e.key === 'b') { e.preventDefault(); document.execCommand('bold');      updateFormatButtons(); return; }
-    if (e.key === 'i') { e.preventDefault(); document.execCommand('italic');    updateFormatButtons(); return; }
-    if (e.key === 'u') { e.preventDefault(); document.execCommand('underline'); updateFormatButtons(); return; }
+    if (e.key === 'b') { e.preventDefault(); applyFormatSmart('bold');      return; }
+    if (e.key === 'i') { e.preventDefault(); applyFormatSmart('italic');    return; }
+    if (e.key === 'u') { e.preventDefault(); applyFormatSmart('underline'); return; }
   }
 
   /* --- ACOTACION vacía: primer carácter imprimible → insertar ( + letra + ) ---
@@ -2047,6 +2644,7 @@ function renderSidebar() {
 
     item.addEventListener('click', () => {
       if (state.user && s.id !== state.currentId) openScript(s.id);
+      toggleSidebar(true);
     });
     item.addEventListener('contextmenu', e => {
       e.preventDefault();
@@ -2287,7 +2885,7 @@ async function exportDocx() {
   downloadBlob(blob, titulo + '.docx');
 }
 
-/* Convierte innerHTML a TextRuns de docx.js */
+/* Convierte innerHTML a TextRuns de docx.js (con soporte completo de formato) */
 function htmlToDocxRuns(html, tipo, D) {
   const div = document.createElement('div');
   div.innerHTML = html;
@@ -2295,23 +2893,123 @@ function htmlToDocxRuns(html, tipo, D) {
   const upper = TIPOS[tipo]?.upper || false;
   const typeBold = ['escena', 'personaje', 'transicion'].includes(tipo);
 
-  function traverse(node, bold, italic, underline) {
+  /* Convierte cualquier forma de color CSS a "RRGGBB" sin # (para docx.js) */
+  function parseCssColor(str) {
+    if (!str) return undefined;
+    str = str.trim().toLowerCase();
+    if (str === 'transparent' || str === 'inherit' || str === 'initial') return undefined;
+    /* rgb(r, g, b) */
+    const mRgb = str.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/);
+    if (mRgb) {
+      return [+mRgb[1], +mRgb[2], +mRgb[3]]
+        .map(v => Math.min(255, v).toString(16).padStart(2, '0'))
+        .join('').toUpperCase();
+    }
+    /* rgba(r, g, b, a) — ignorar si alfa es 0 */
+    const mRgba = str.match(/^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)$/);
+    if (mRgba) {
+      if (+mRgba[4] === 0) return undefined;
+      return [+mRgba[1], +mRgba[2], +mRgba[3]]
+        .map(v => Math.min(255, v).toString(16).padStart(2, '0'))
+        .join('').toUpperCase();
+    }
+    /* #RRGGBB */
+    const m6 = str.match(/^#([0-9a-f]{6})$/);
+    if (m6) return m6[1].toUpperCase();
+    /* #RGB */
+    const m3 = str.match(/^#([0-9a-f]{3})$/);
+    if (m3) {
+      const c = m3[1];
+      return (c[0]+c[0]+c[1]+c[1]+c[2]+c[2]).toUpperCase();
+    }
+    return undefined;
+  }
+
+  /* Mapa de hex exactos → nombre OOXML de highlight (w:highlight).
+     Estos son los únicos colores que Word reconoce como "marcador".
+     Cualquier otro color cae en shading (fondo de carácter). */
+  const WORD_HL = {
+    'FFFF00': 'yellow',
+    '00FF00': 'green',
+    '00FFFF': 'cyan',
+    'FF00FF': 'magenta',
+    'FF0000': 'red',
+    '0000FF': 'blue',
+    '000080': 'darkBlue',
+    '008080': 'darkCyan',
+    '008000': 'darkGreen',
+    '800080': 'darkMagenta',
+    '800000': 'darkRed',
+    '808000': 'darkYellow',
+    '808080': 'darkGray',
+    'C0C0C0': 'lightGray',
+    '000000': 'black',
+    'FFFFFF': 'white',
+  };
+
+  /* Recorre el árbol DOM heredando el estado de formato acumulado */
+  function traverse(node, fmt) {
     if (node.nodeType === Node.TEXT_NODE) {
       let text = node.textContent;
       if (upper) text = text.toUpperCase();
-      if (text) runs.push(new D.TextRun({ text, bold: bold || typeBold, italics: italic, underline: underline ? {} : undefined, font:'Courier New', size:24 }));
+      if (!text) return;
+
+      const runOpts = {
+        text,
+        font:     'Courier New',
+        size:     24,
+        bold:     fmt.bold || typeBold,
+        italics:  fmt.italic   || undefined,
+        underline: fmt.underline ? {} : undefined,
+        strike:   fmt.strike    || undefined,
+        color:    fmt.color     || undefined,
+      };
+      /* Resaltado: usar highlight OOXML cuando el color coincide exactamente
+         con uno de los 16 colores de marcador de Word → misma apariencia
+         en pantalla y en Word. Colores arbitrarios caen en shading. */
+      if (fmt.bgColor) {
+        const hlName = WORD_HL[fmt.bgColor.toUpperCase()];
+        if (hlName) {
+          runOpts.highlight = hlName;
+        } else {
+          runOpts.shading = { type: 'solid', color: 'auto', fill: fmt.bgColor };
+        }
+      }
+      runs.push(new D.TextRun(runOpts));
+
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       const tag = node.tagName.toLowerCase();
-      node.childNodes.forEach(ch => traverse(ch,
-        bold      || tag==='b' || tag==='strong',
-        italic    || tag==='i' || tag==='em',
-        underline || tag==='u'
-      ));
+      const st  = node.style || {};
+      /* Copia el estado de formato del padre */
+      const nf = Object.assign({}, fmt);
+
+      /* Etiquetas semánticas */
+      if (tag === 'b' || tag === 'strong')            nf.bold      = true;
+      if (tag === 'i' || tag === 'em')                nf.italic    = true;
+      if (tag === 'u')                                nf.underline = true;
+      if (tag === 's' || tag === 'del' || tag === 'strike') nf.strike = true;
+
+      /* Color de texto: style="color:..." o <font color="..."> */
+      const rawColor = st.color || (tag === 'font' ? node.getAttribute('color') : null);
+      if (rawColor) {
+        const c = parseCssColor(rawColor);
+        if (c) nf.color = c;
+      }
+
+      /* Resaltado: style="background-color:..." */
+      if (st.backgroundColor) {
+        const c = parseCssColor(st.backgroundColor);
+        if (c) nf.bgColor = c;
+        else   nf.bgColor = undefined; /* "transparent" quita el resaltado */
+      }
+
+      node.childNodes.forEach(ch => traverse(ch, nf));
     }
   }
 
-  div.childNodes.forEach(n => traverse(n, false, false, false));
-  if (!runs.length) runs.push(new D.TextRun({ text:'', font:'Courier New', size:24, bold: typeBold }));
+  const initFmt = { bold: false, italic: false, underline: false, strike: false, color: undefined, bgColor: undefined };
+  div.childNodes.forEach(n => traverse(n, initFmt));
+  if (!runs.length) runs.push(new D.TextRun({ text: '', font: 'Courier New', size: 24, bold: typeBold }));
   return runs;
 }
 
@@ -2354,10 +3052,341 @@ function setSyncStatus(status) {
    ============================================================ */
 function updateFormatButtons() {
   try {
-    $('btn-bold'     ).classList.toggle('active', document.queryCommandState('bold'));
-    $('btn-italic'   ).classList.toggle('active', document.queryCommandState('italic'));
-    $('btn-underline').classList.toggle('active', document.queryCommandState('underline'));
+    $('btn-bold'     )?.classList.toggle('active', document.queryCommandState('bold'));
+    $('btn-italic'   )?.classList.toggle('active', document.queryCommandState('italic'));
+    $('btn-underline')?.classList.toggle('active', document.queryCommandState('underline'));
+    $('btn-strike'   )?.classList.toggle('active', document.queryCommandState('strikeThrough'));
   } catch(_) {}
+}
+
+/* Muestra u oculta el panel vertical de formato */
+function showFormatGroup(show, line) {
+  const popup = $('fmt-popup');
+  if (!popup) return;
+  if (show && line) {
+    state.fmtLine = line;
+    positionFormatPopup(line);
+    popup.classList.add('visible');
+  } else {
+    popup.classList.remove('visible');
+    hideCaseMenu();
+    if (!show) state.fmtLine = null;
+  }
+}
+
+/* Posiciona el panel a la IZQUIERDA de la hoja.
+   La Y es fija en el viewport (centrada entre toolbar y statusbar),
+   completamente desvinculada de la línea activa. */
+function positionFormatPopup(line) {
+  const popup = $('fmt-popup');
+  if (!popup) return;
+
+  /* Horizontal: necesitamos la hoja para saber dónde está el borde izquierdo */
+  const page = line ? line.closest('.page') : document.querySelector('.page');
+  if (!page) return;
+
+  const pageRect = page.getBoundingClientRect();
+  const popW     = popup.offsetWidth  || 44;
+  const popH     = popup.offsetHeight || 320;
+  const vpH      = window.innerHeight;
+  const vpW      = window.innerWidth;
+  const gap      = 14;
+
+  /* Horizontal: siempre a la izquierda de la hoja */
+  let left = pageRect.left - popW - gap;
+  if (left < 6)            left = 6;
+  if (left + popW > vpW - 6) left = vpW - popW - 6;
+
+  /* Vertical: centrado entre toolbar (42px) y statusbar (26px),
+     sin depender en absoluto de qué línea está activa */
+  const TOOLBAR_H  = 42;
+  const STATUSBAR_H = 26;
+  const available  = vpH - TOOLBAR_H - STATUSBAR_H;
+  let   top        = TOOLBAR_H + Math.max(8, Math.round((available - popH) / 2));
+  /* Seguro de bounds */
+  if (top < TOOLBAR_H + 8) top = TOOLBAR_H + 8;
+  if (top + popH > vpH - STATUSBAR_H - 8) top = vpH - STATUSBAR_H - popH - 8;
+
+  popup.style.left = Math.round(left) + 'px';
+  popup.style.top  = Math.round(top)  + 'px';
+}
+
+/* Reposiciona el panel usando la ultima linea conocida */
+function refreshFormatPopup() {
+  const popup = $('fmt-popup');
+  const line = state.fmtLine || (document.activeElement?.classList?.contains('script-line') ? document.activeElement : null);
+  if (popup?.classList.contains('visible') && line) {
+    positionFormatPopup(line);
+  }
+}
+
+/* ============================================================
+   FORMATO INTELIGENTE (aplica a seleccion o a todo el cuadro)
+   ============================================================ */
+
+/* Guarda y restaura la seleccion para los pickers de color */
+let _savedSel = null;
+/* scrollTop del editor en el momento en que positionFormatPopup fijó el popup */
+let _fmtScrollTop = 0;
+function saveFormatSelection() {
+  const sel = window.getSelection();
+  _savedSel = (sel && sel.rangeCount > 0) ? sel.getRangeAt(0).cloneRange() : null;
+}
+function restoreFormatSelection() {
+  if (!_savedSel) return;
+  try {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(_savedSel);
+  } catch(_) {}
+}
+
+/* Detecta si un nodo (o sus hijos) tiene background-color inline */
+function hasInlineBackground(root) {
+  if (!root) return false;
+  if (root.nodeType === Node.ELEMENT_NODE) {
+    const bg = root.style && root.style.backgroundColor;
+    if (bg && bg !== '' && bg !== 'transparent' && bg !== 'rgba(0, 0, 0, 0)') return true;
+    for (const child of root.childNodes) {
+      if (hasInlineBackground(child)) return true;
+    }
+  }
+  return false;
+}
+
+/* Elimina background-color inline de todos los elementos del subárbol */
+function removeInlineBackground(root) {
+  if (!root) return;
+  const walk = node => {
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    if (node.style && node.style.backgroundColor) node.style.backgroundColor = '';
+    /* Limpiar el atributo style si queda vacío */
+    if (node.getAttribute && node.getAttribute('style') !== null) {
+      if (!node.style.cssText.trim()) node.removeAttribute('style');
+    }
+    /* Procesar hijos en copia para poder modificar el DOM sin romper la iteración */
+    Array.from(node.childNodes).forEach(walk);
+    /* Desempaquetar spans vacíos de estilo que ya no hacen nada */
+    if (node.tagName === 'SPAN' && !node.className && !node.id
+        && !(node.getAttribute('style') || '').trim()) {
+      const parent = node.parentNode;
+      if (parent) {
+        while (node.firstChild) parent.insertBefore(node.firstChild, node);
+        parent.removeChild(node);
+      }
+    }
+  };
+  walk(root);
+}
+
+/* Selecciona todo el contenido de un script-line */
+function selectAllInLine(line) {
+  const r = document.createRange();
+  r.selectNodeContents(line);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+/* Aplica un comando execCommand de forma inteligente:
+   sin seleccion → aplica a todo el cuadro; con seleccion → solo a la seleccion */
+function applyFormatSmart(cmd) {
+  const active = document.activeElement;
+  const line   = active?.classList.contains('script-line') ? active : null;
+  if (!line) return;
+
+  const sel          = window.getSelection();
+  const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed
+                       && line.contains(sel.getRangeAt(0).commonAncestorContainer);
+
+  if (!hasSelection) selectAllInLine(line);
+
+  document.execCommand(cmd);
+  updateFormatButtons();
+  scheduleSave();
+
+  /* Devolver el cursor al final si se aplico a todo */
+  if (!hasSelection) moveCursorToEnd(line);
+}
+
+/* ---- TRANSFORMACION DE CAPITALIZACIÓN ---- */
+function applyCase(text, mode) {
+  switch (mode) {
+    case 'sentence':
+      return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+    case 'lower':
+      return text.toLowerCase();
+    case 'upper':
+      return text.toUpperCase();
+    case 'title':
+      return text.replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+    case 'toggle':
+      return text.split('').map(c =>
+        c === c.toUpperCase() ? c.toLowerCase() : c.toUpperCase()
+      ).join('');
+    default:
+      return text;
+  }
+}
+
+/* Transforma los nodos de texto respetando el marcado HTML */
+function transformTextNodesInNode(node, transformFn) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    node.textContent = transformFn(node.textContent);
+  } else {
+    for (const child of Array.from(node.childNodes)) {
+      transformTextNodesInNode(child, transformFn);
+    }
+  }
+}
+
+/* Transforma solo los nodos de texto dentro de un Range */
+function transformTextNodesInRange(range, transformFn) {
+  /* Extraer, transformar, reinsertar */
+  const frag = range.extractContents();
+  transformTextNodesInNode(frag, transformFn);
+  range.insertNode(frag);
+  /* Restaurar seleccion sobre el fragmento insertado */
+  const newRange = document.createRange();
+  newRange.selectNodeContents(range.startContainer);
+  /* Re-seleccion aproximada; simplificamos al fragment */
+}
+
+function applyCaseTransform(mode) {
+  const active = document.activeElement;
+  const line   = active?.classList.contains('script-line') ? active : null;
+  if (!line) return;
+
+  const transformFn = text => applyCase(text, mode);
+  const sel         = window.getSelection();
+  const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed
+                       && line.contains(sel.getRangeAt(0).commonAncestorContainer);
+
+  if (hasSelection) {
+    const range = sel.getRangeAt(0).cloneRange();
+    /* Transformar el texto plano de la seleccion */
+    const selectedText  = range.toString();
+    const transformed   = transformFn(selectedText);
+    /* Insertar texto transformado */
+    range.deleteContents();
+    range.insertNode(document.createTextNode(transformed));
+    /* Restaurar seleccion */
+    const newRange = document.createRange();
+    newRange.setStart(range.startContainer, range.startOffset);
+    newRange.setEnd(range.startContainer, range.startOffset + transformed.length);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+  } else {
+    /* Aplicar a todo el contenido del script-line */
+    transformTextNodesInNode(line, transformFn);
+    moveCursorToEnd(line);
+  }
+
+  scheduleSave();
+  hideCaseMenu();
+}
+
+/* ---- MENU DE CAPITALIZACIÓN ---- */
+function showCaseMenu() {
+  const menu  = $('fmt-case-menu');
+  const btn   = $('btn-case');
+  const popup = $('fmt-popup');
+  if (!menu || !btn) return;
+
+  hideTextPalette();
+  hideHlPalette();
+
+  const popRect = popup.getBoundingClientRect();
+  const vpH     = window.innerHeight;
+  const vpW     = window.innerWidth;
+  const menuH   = menu.offsetHeight || 180;
+  const menuW   = menu.offsetWidth  || 240;
+
+  let top  = popRect.top;
+  let left = popRect.right + 8;
+
+  if (top  + menuH > vpH - 8) top  = vpH - menuH - 8;
+  if (top  < 8)                top  = 8;
+  if (left + menuW > vpW - 8)  left = vpW - menuW - 8;
+  if (left < 4)                left = 4;
+
+  menu.style.top  = top  + 'px';
+  menu.style.left = left + 'px';
+  menu.classList.add('open');
+  btn.classList.add('active');
+}
+
+function hideCaseMenu() {
+  const menu = $('fmt-case-menu');
+  const btn  = $('btn-case');
+  if (menu) menu.classList.remove('open');
+  if (btn)  btn.classList.remove('active');
+}
+
+/* ---- PALETA DE RESALTADO ---- */
+function showTextPalette() {
+  const palette = $('fmt-text-palette');
+  const popup   = $('fmt-popup');
+  if (!palette || !popup) return;
+  hideCaseMenu();
+  hideHlPalette();
+
+  const popRect = popup.getBoundingClientRect();
+  const vpH     = window.innerHeight;
+  const vpW     = window.innerWidth;
+  const palH    = palette.offsetHeight || 120;
+  const palW    = palette.offsetWidth  || 248;
+
+  let top  = popRect.top;
+  let left = popRect.right + 8;
+
+  if (top + palH > vpH - 8) top = vpH - palH - 8;
+  if (top < 8) top = 8;
+  if (left + palW > vpW - 8) left = vpW - palW - 8;
+  if (left < 4) left = 4;
+
+  palette.style.top  = top  + 'px';
+  palette.style.left = left + 'px';
+  palette.classList.add('open');
+  $('btn-color-text')?.classList.add('active');
+}
+
+function hideTextPalette() {
+  $('fmt-text-palette')?.classList.remove('open');
+  $('btn-color-text')?.classList.remove('active');
+}
+
+function showHlPalette() {
+  const palette = $('fmt-hl-palette');
+  const popup   = $('fmt-popup');
+  if (!palette || !popup) return;
+  hideCaseMenu(); /* cerrar otros paneles */
+  hideTextPalette();
+
+  const popRect = popup.getBoundingClientRect();
+  const vpH     = window.innerHeight;
+  const vpW     = window.innerWidth;
+  const palH    = palette.offsetHeight || 130;
+  const palW    = palette.offsetWidth  || 140;
+
+  /* A la DERECHA del popup (entre la barra y la hoja), 8px de separacion */
+  let top  = popRect.top;
+  let left = popRect.right + 8;
+
+  if (top + palH > vpH - 8) top = vpH - palH - 8;
+  if (top < 8) top = 8;
+  if (left + palW > vpW - 8) left = vpW - palW - 8;
+  if (left < 4) left = 4;
+
+  palette.style.top  = top  + 'px';
+  palette.style.left = left + 'px';
+  palette.classList.add('open');
+  $('btn-color-bg')?.classList.add('active');
+}
+
+function hideHlPalette() {
+  $('fmt-hl-palette')?.classList.remove('open');
+  $('btn-color-bg')?.classList.remove('active');
 }
 
 const TYPE_PREVIEWS = {
@@ -2369,23 +3398,33 @@ const TYPE_PREVIEWS = {
   transicion: { label: 'Transición', preview: 'CORTE A',                     color: '#e0c040' },
 };
 
-function updateTypeIndicator(tipo) {
+function updateTypeIndicator(tipo, visible) {
   const info = TYPE_PREVIEWS[tipo] || { label: tipo || 'Acción', preview: '', color: '#6f9fcf' };
-  const labelEl = $('type-indicator-label');
-  const dotEl   = $('type-indicator-dot');
+  const labelEl = $('status-type-label');
+  const dotEl   = $('status-type-dot');
+  const box     = $('status-type');
   if (labelEl) {
     labelEl.textContent = info.label;
     labelEl.style.fontWeight = (tipo === 'escena' || tipo === 'personaje' || tipo === 'transicion') ? '700' : '600';
     labelEl.style.color = info.color;
   }
-  if (dotEl)   dotEl.style.background = info.color;
-  /* Actualizar el borde del indicador con el color del tipo */
-  const box = $('type-indicator');
-  if (box) box.style.borderColor = info.color + '55';
+  if (dotEl) dotEl.style.background = info.color;
+  /* Mostrar u ocultar segun argumento */
+  if (visible === true  && box) box.classList.add('visible');
+  if (visible === false && box) box.classList.remove('visible');
 }
 
 /* Alias de compatibilidad para codigo que aun llama updateTypeSelector */
 function updateTypeSelector(tipo) { updateTypeIndicator(tipo); }
+
+/* Estado visual del botón Portada */
+function updateCoverBtn() {
+  const btn = $('btn-cover');
+  if (!btn) return;
+  const hasCover = !!(state.cover.titulo || state.cover.autor ||
+                      state.cover.basado  || state.cover.contacto);
+  btn.classList.toggle('has-cover', hasCover);
+}
 
 /* ============================================================
    23. LISTENER DE AUTENTICACION
@@ -2397,6 +3436,7 @@ function onAuthStateChanged(user) {
     /* — Usuario autenticado — */
     $('user-label').textContent = user.displayName || user.email || '';
     $('btn-auth').textContent   = 'Cerrar sesion';
+    $('btn-auth').classList.add('logged-in');
     $('no-session-notice').style.display = 'none';
 
     /* Verificar contenido anonimo pendiente */
@@ -2433,6 +3473,8 @@ function onAuthStateChanged(user) {
     /* — Sin sesion — */
     $('user-label').textContent = '';
     $('btn-auth').textContent   = 'Iniciar sesion';
+    $('btn-auth').classList.remove('logged-in');
+    $('btn-auth').classList.remove('logged-in');
     $('no-session-notice').style.display = '';
 
     /* Cancelar ambos listeners */
@@ -2449,6 +3491,22 @@ function onAuthStateChanged(user) {
 /* ============================================================
    24. EVENTOS DE UI
    ============================================================ */
+function toggleSidebar(forceClose) {
+  const sidebar  = $('sidebar');
+  const backdrop = $('sidebar-backdrop');
+  const btn      = $('btn-sidebar-toggle');
+  const isOpen   = sidebar.classList.contains('open');
+  if (forceClose || isOpen) {
+    sidebar.classList.remove('open');
+    backdrop.classList.remove('open');
+    btn.classList.remove('active');
+  } else {
+    sidebar.classList.add('open');
+    backdrop.classList.add('open');
+    btn.classList.add('active');
+  }
+}
+
 function bindUIEvents() {
   /* Autenticacion */
   $('btn-auth').addEventListener('click', () => {
@@ -2471,6 +3529,28 @@ function bindUIEvents() {
   });
 
   /* Nuevo guion */
+  /* Toggle sidebar */
+  $('btn-sidebar-toggle').addEventListener('click', () => toggleSidebar());
+  $('sidebar-backdrop').addEventListener('click', () => toggleSidebar(true));
+
+  /* Ripple radial en botones toolbar */
+  document.querySelectorAll('.tbtn, .tbtn-icon').forEach(btn => {
+    btn.addEventListener('mousemove', e => {
+      const r = btn.getBoundingClientRect();
+      btn.style.setProperty('--rx', ((e.clientX - r.left) / r.width  * 100) + '%');
+      btn.style.setProperty('--ry', ((e.clientY - r.top)  / r.height * 100) + '%');
+    });
+  });
+
+  /* Ripple effect en botones toolbar */
+  document.querySelectorAll('.tbtn, .tbtn-icon').forEach(btn => {
+    btn.addEventListener('mousemove', e => {
+      const r = btn.getBoundingClientRect();
+      btn.style.setProperty('--rx', ((e.clientX - r.left) / r.width * 100) + '%');
+      btn.style.setProperty('--ry', ((e.clientY - r.top)  / r.height * 100) + '%');
+    });
+  });
+
   $('btn-new-script').addEventListener('click', async () => {
     if (!state.user) { showAuthModal(); return; }
     const id = await createScript(state.user.uid);
@@ -2479,9 +3559,112 @@ function bindUIEvents() {
   });
 
   /* Botones de formato — mousedown previene perder el foco del editor */
-  $('btn-bold'     ).addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('bold');      updateFormatButtons(); });
-  $('btn-italic'   ).addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('italic');    updateFormatButtons(); });
-  $('btn-underline').addEventListener('mousedown', e => { e.preventDefault(); document.execCommand('underline'); updateFormatButtons(); });
+  $('btn-bold'     ).addEventListener('mousedown', e => { e.preventDefault(); applyFormatSmart('bold');          });
+  $('btn-italic'   ).addEventListener('mousedown', e => { e.preventDefault(); applyFormatSmart('italic');        });
+  $('btn-underline').addEventListener('mousedown', e => { e.preventDefault(); applyFormatSmart('underline');     });
+  $('btn-strike'   ).addEventListener('mousedown', e => { e.preventDefault(); applyFormatSmart('strikeThrough'); });
+
+  /* Boton de cambio de capitalización */
+  $('btn-case').addEventListener('mousedown', e => { e.preventDefault(); });
+  $('btn-case').addEventListener('click', () => {
+    const menu = $('fmt-case-menu');
+    if (menu?.classList.contains('open')) hideCaseMenu();
+    else showCaseMenu();
+  });
+
+  /* Items del menu de capitalización */
+  document.querySelectorAll('.fmt-case-item').forEach(item => {
+    item.addEventListener('mousedown', e => e.preventDefault());
+    item.addEventListener('click', () => applyCaseTransform(item.dataset.case));
+  });
+
+  /* Color de texto */
+  $('btn-color-text').addEventListener('mousedown', e => {
+    e.preventDefault();
+    saveFormatSelection();
+  });
+  $('btn-color-text').addEventListener('click', () => {
+    if ($('fmt-text-palette')?.classList.contains('open')) { hideTextPalette(); return; }
+    showTextPalette();
+  });
+  $('color-text-input')?.addEventListener('input', e => {
+    const value = e.target.value;
+    restoreFormatSelection();
+    const active = document.activeElement;
+    const line   = active?.classList.contains('script-line') ? active : null;
+    if (line) {
+      const sel = window.getSelection();
+      const hasSelection = sel && sel.rangeCount > 0 && !sel.isCollapsed
+                           && line.contains(sel.getRangeAt(0).commonAncestorContainer);
+      if (!hasSelection) selectAllInLine(line);
+      document.execCommand('foreColor', false, value);
+      if (!hasSelection) moveCursorToEnd(line);
+    }
+    $('color-text-bar').style.background = value;
+    $('color-text-dot').style.background = value;
+    $('color-text-value').textContent = value.toUpperCase();
+    scheduleSave();
+  });
+
+  /* Resaltado de texto — abre paleta de colores fijos */
+  $('btn-color-bg').addEventListener('mousedown', e => { e.preventDefault(); saveFormatSelection(); });
+  $('btn-color-bg').addEventListener('click', () => {
+    if ($('fmt-hl-palette')?.classList.contains('open')) { hideHlPalette(); return; }
+    showHlPalette();
+  });
+
+  /* Swatches de la paleta */
+  document.querySelectorAll('.hl-swatch:not(.hl-empty)').forEach(swatch => {
+    swatch.addEventListener('mousedown', e => e.preventDefault());
+    swatch.addEventListener('click', () => {
+      const color = swatch.dataset.color;
+      restoreFormatSelection();
+      const active = document.activeElement;
+      const line   = active?.classList.contains('script-line') ? active : null;
+      if (line) {
+        const sel = window.getSelection();
+        const hasSel = sel && sel.rangeCount > 0 && !sel.isCollapsed
+                       && line.contains(sel.getRangeAt(0).commonAncestorContainer);
+        if (!hasSel) selectAllInLine(line);
+        try { document.execCommand('hiliteColor', false, color); }
+        catch(_) { document.execCommand('backColor', false, color); }
+        if (!hasSel) moveCursorToEnd(line);
+      }
+      $('color-bg-bar').style.background = color;
+      hideHlPalette();
+      scheduleSave();
+    });
+  });
+
+  /* "Sin color" — quita el resaltado */
+  $('hl-no-color').addEventListener('mousedown', e => e.preventDefault());
+  $('hl-no-color').addEventListener('click', () => {
+    restoreFormatSelection();
+    const active = document.activeElement;
+    const line   = active?.classList.contains('script-line') ? active : null;
+    if (line) {
+      const sel = window.getSelection();
+      const hasSel = sel && sel.rangeCount > 0 && !sel.isCollapsed
+                     && line.contains(sel.getRangeAt(0).commonAncestorContainer);
+      if (!hasSel) selectAllInLine(line);
+      try { document.execCommand('hiliteColor', false, 'transparent'); } catch(_) {}
+      try { document.execCommand('backColor',   false, 'transparent'); } catch(_) {}
+      removeInlineBackground(line);
+      if (!hasSel) moveCursorToEnd(line);
+    }
+    hideHlPalette();
+    scheduleSave();
+  });
+
+  /* Cerrar menu de capitalización al hacer click fuera */
+  document.addEventListener('click', e => {
+    if (!$('fmt-popup')?.contains(e.target) && !$('fmt-case-menu')?.contains(e.target)) {
+      hideCaseMenu();
+    }
+  });
+
+  /* El popup es position:fixed y está centrado en el viewport —
+     no necesita ningún ajuste al hacer scroll. */
 
   /* Numeracion de escenas */
   $('btn-scene-nums').addEventListener('click', () => {
@@ -2528,28 +3711,164 @@ function bindUIEvents() {
     if (!$('ctx-menu').contains(e.target)) hideCtxMenu();
   });
 
-  /* Actualizar botones de formato al seleccionar texto */
+  /* Actualizar estado de botones de formato al cambiar la seleccion */
   document.addEventListener('selectionchange', () => {
     updateFormatButtons();
-    /* Actualizar indicador de tipo segun el parrafo activo */
-    const active = document.activeElement;
-    if (active && active.classList.contains('script-line')) {
-      updateTypeIndicator(active.dataset.tipo);
+    const sel = window.getSelection();
+    const anchor = sel?.anchorNode;
+    const line = anchor?.nodeType === Node.ELEMENT_NODE
+      ? anchor.closest?.('.script-line')
+      : anchor?.parentElement?.closest?.('.script-line');
+    if (line && line.dataset.tipo !== '__pagebreak__') {
+      state.fmtLine = line;
+      if ($('fmt-popup')?.classList.contains('visible')) {
+        positionFormatPopup(line);
+      }
+    } else if (!document.activeElement?.classList.contains?.('script-line')) {
+      hideHlPalette();
     }
   });
 
-  /* Actualizar indicador al hacer clic o usar flechas */
-  document.addEventListener('click', e => {
+  /* Focus en un parrafo: mostrar B/I/S y actualizar barra de estado */
+  document.addEventListener('focusin', e => {
     const line = e.target.closest?.('.script-line');
     if (line && line.dataset.tipo !== '__pagebreak__') {
-      updateTypeIndicator(line.dataset.tipo);
+      state.fmtLine = line;
+      showFormatGroup(true, line);
+      updateTypeIndicator(line.dataset.tipo, true);
+      updateFormatButtons();
+      /* Numero de pagina en la barra de estado */
+      const page = line.closest?.('.page');
+      const numEl = page?.querySelector('.page-num');
+      const sp = $('status-page');
+      if (sp && numEl) sp.textContent = 'Pág. ' + numEl.textContent.trim();
+      else if (sp) sp.textContent = '';
     }
   });
+
+  /* Blur: ocultar si el foco sale del editor (no cuando se hace clic en toolbar o popup) */
+  document.addEventListener('focusout', e => {
+    const next = e.relatedTarget;
+    const staysEditing = next && (
+      next.classList?.contains('script-line') ||
+      next.closest?.('#toolbar') ||
+      next.closest?.('#fmt-popup') ||
+      next.closest?.('#fmt-case-menu') ||
+      next.closest?.('#fmt-hl-palette') ||
+      next.closest?.('#fmt-text-palette')
+    );
+    if (!staysEditing) {
+      showFormatGroup(false, null);
+      hideHlPalette();
+      hideTextPalette();
+      hideCaseMenu();
+      updateTypeIndicator(null, false);
+      const sp = $('status-page'); if (sp) sp.textContent = '';
+    }
+  });
+
+  /* Cerrar paleta y menus al hacer click fuera de ellos o de un cuadro de texto */
+  document.addEventListener('pointerdown', e => {
+    const insideTextPalette = e.target.closest?.('#fmt-text-palette');
+    const insidePalette     = e.target.closest?.('#fmt-hl-palette');
+    const insideFmt         = e.target.closest?.('#fmt-popup, #fmt-hl-palette, #fmt-case-menu, #fmt-text-palette');
+    const insideLine        = e.target.closest?.('.script-line');
+    const insideEditor      = e.target.closest?.('#editor-area');
+
+    const clickedTextBtn = e.target.closest?.('#btn-color-text');
+    const clickedHlBtn   = e.target.closest?.('#btn-color-bg');
+    const clickedCaseBtn = e.target.closest?.('#btn-case');
+
+    /* Las paletas se cierran con cualquier click fuera de ellas o de un script-line,
+       EXCEPTO cuando se hace click en su propio botón (el toggle lo maneja el click). */
+    if (!insideTextPalette && !insideLine && !clickedTextBtn) {
+      hideTextPalette();
+    }
+    if (!insidePalette && !insideLine && !clickedHlBtn) {
+      hideHlPalette();
+    }
+
+    /* El menu de capitalización se cierra igual */
+    if (!insideFmt && !clickedCaseBtn) {
+      hideCaseMenu();
+    }
+
+    /* Ocultar barra de formato si se hace click en zona vacia del editor */
+    if (insideEditor && !insideFmt && !insideLine) {
+      const active = document.activeElement;
+      if (!active?.classList?.contains?.('script-line')) {
+        showFormatGroup(false, null);
+      }
+    }
+  });
+
+  /* Reposicionar con scroll y redimension */
+  /* En resize: reposicionar el popup (horizontal puede cambiar si la página se mueve)
+     En scroll: NO reposicionar el popup — es position:fixed y ya está centrado en el viewport */
+  const syncFormatUI = () => {
+    /* Solo reposicionar horizontalmente en resize; ignorar en scroll */
+    if ($('fmt-popup')?.classList.contains('visible')) {
+      const line = state.fmtLine || (document.activeElement?.classList?.contains('script-line') ? document.activeElement : null);
+      if (line) positionFormatPopup(line);
+    }
+    /* Reposicionar sub-paletas relativas al popup (que ya está fijo) */
+    if ($('fmt-text-palette')?.classList.contains('open')) {
+      const popup = $('fmt-popup');
+      const palette = $('fmt-text-palette');
+      if (popup && palette) {
+        const popRect = popup.getBoundingClientRect();
+        const vpH = window.innerHeight;
+        const vpW = window.innerWidth;
+        const palH = palette.offsetHeight || 120;
+        const palW = palette.offsetWidth  || 248;
+        let top  = popRect.top;
+        let left = popRect.right + 8;
+        if (top + palH > vpH - 8) top = vpH - palH - 8;
+        if (top < 8) top = 8;
+        if (left + palW > vpW - 8) left = vpW - palW - 8;
+        if (left < 4) left = 4;
+        palette.style.top  = top  + 'px';
+        palette.style.left = left + 'px';
+      }
+    }
+    if ($('fmt-hl-palette')?.classList.contains('open')) {
+      const popup = $('fmt-popup');
+      const palette = $('fmt-hl-palette');
+      if (popup && palette) {
+        const popRect = popup.getBoundingClientRect();
+        const vpH = window.innerHeight;
+        const vpW = window.innerWidth;
+        const palH = palette.offsetHeight || 130;
+        const palW = palette.offsetWidth  || 140;
+        let top  = popRect.top;
+        let left = popRect.right + 8;
+        if (top + palH > vpH - 8) top = vpH - palH - 8;
+        if (top < 8) top = 8;
+        if (left + palW > vpW - 8) left = vpW - palW - 8;
+        if (left < 4) left = 4;
+        palette.style.top  = top  + 'px';
+        palette.style.left = left + 'px';
+      }
+    }
+  };
+  /* scroll: no reposicionar el popup (es fixed y centrado en viewport)
+     resize: sí reposicionar para corregir el left horizontal */
+  window.addEventListener('resize', syncFormatUI, { passive: true });
+
+  /* Inicializar preview del selector de color */
+  if ($('color-text-input')) {
+    const initValue = $('color-text-input').value || '#e53935';
+    if ($('color-text-bar')) $('color-text-bar').style.background = initValue;
+    if ($('color-text-dot')) $('color-text-dot').style.background = initValue;
+    if ($('color-text-value')) $('color-text-value').textContent = initValue.toUpperCase();
+  }
+
+  /* Teclas de navegacion: actualizar barra de estado */
   document.addEventListener('keyup', e => {
     if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End'].includes(e.key)) {
       const active = document.activeElement;
-      if (active && active.classList.contains('script-line')) {
-        updateTypeIndicator(active.dataset.tipo);
+      if (active && active.classList.contains('script-line') && active.dataset.tipo !== '__pagebreak__') {
+        updateTypeIndicator(active.dataset.tipo, true);
       }
     }
   });
@@ -2577,6 +3896,7 @@ function saveCoverModal() {
   state.showCover         = $('cv-mostrar' ).checked;
 
   $('cover-modal').classList.remove('open');
+  updateCoverBtn();
 
   /* Actualizar portada en pantalla */
   const coverPage = $('cover-page');
