@@ -937,10 +937,14 @@ body.dark-sheet .script-line { caret-color: #e8e8e8; }
 }
 body.dark-sheet .script-line:focus { background: rgba(184,149,74,.06); }
 
-/* Número de escena (cuando está activado) */
-.scene-num {
+/* Número de escena (cuando está activado) — renderizado como ::after para que
+   quede completamente fuera del contenido editable y el cursor nunca pueda
+   posicionarse dentro del número ni escribir sobre él. */
+.script-line[data-tipo="escena"][data-scene-num]::after {
+  content: attr(data-scene-num);
   position: absolute;
   left: calc(-1 * var(--ml) + 72px); /* 0.75in desde el borde izq. del papel */
+  top: 0;
   font-family: var(--font-script); font-size: 12pt; line-height: var(--lh);
   color: var(--sheet-num); pointer-events: none; user-select: none;
 }
@@ -1079,6 +1083,88 @@ body.dark-sheet .script-line:focus { background: rgba(184,149,74,.06); }
   .page { box-shadow: none; margin: 0; }
   .page + .page { page-break-before: always; }
 }
+
+/* ============================================================
+   ADAPTACIÓN MÓVIL
+   ============================================================ */
+
+/* ---- Toolbar compacto (≤ 860px) ---- */
+@media (max-width: 860px) {
+  #toolbar { padding: 0 6px; gap: 1px; height: 44px; }
+  .brand   { display: none; }
+  #sync-status { display: none; }
+  #user-label  { display: none; }
+  .tsep        { display: none; }
+
+  /* font-size:0 silencia los nodos de texto de los botones icon
+     dejando solo el SVG visible */
+  .tbtn-icon {
+    font-size: 0 !important;
+    padding: 0 9px;
+    gap: 0;
+    min-width: 34px;
+  }
+  .tbtn-icon svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* Botón auth (solo texto, sin icono SVG) */
+  #btn-auth { font-size: 11px; padding: 0 9px; letter-spacing: 0; min-width: auto; }
+
+  /* Editor sin padding lateral — las páginas se escalan desde JS */
+  #editor-area {
+    padding: 16px 0 80px;
+    overflow-x: hidden;
+  }
+
+  /* pages-container: transform aplicado desde JS */
+  #pages-container { transform-origin: top center; }
+
+  /* ---- Panel de formato: barra horizontal flotante ---- */
+  #fmt-popup {
+    flex-direction: row !important;
+    padding: 7px 10px;
+    gap: 4px;
+    border-radius: 14px;
+    min-width: 0;
+    /* Reemplazar animación lateral por fade+zoom desde abajo */
+    transform: translateY(8px) scale(.94) !important;
+    transform-origin: bottom center !important;
+  }
+  #fmt-popup.visible {
+    transform: translateY(0) scale(1) !important;
+  }
+
+  /* Divisor vertical dentro de la barra horizontal */
+  .fmt-divider { width: 1px; height: 28px; margin: 0 3px; }
+
+  /* Botones más grandes para touch (mínimo 44×44px recomendado por Apple/Google) */
+  .fmtbtn        { width: 40px; height: 40px; }
+  .fmt-color-btn { width: 40px; height: 40px; }
+
+  /* Sub-menús: posicionados por JS; en móvil aparecen encima del popup */
+  #fmt-case-menu  { min-width: 200px; }
+
+  /* Modal más amigable en móvil */
+  .modal {
+    width: calc(100vw - 32px);
+    max-width: 100%;
+    max-height: 90dvh;
+    overflow-y: auto;
+    padding: 24px 20px;
+  }
+}
+
+/* ---- Pantallas pequeñas (≤ 560px) ---- */
+@media (max-width: 560px) {
+  #toolbar-title { display: none; }
+  #btn-export    { display: none; }
+}
+
+/* ---- Pantallas muy pequeñas (≤ 380px) ---- */
+@media (max-width: 380px) {
+  #btn-dark-sheet { display: none; }
+  #btn-scene-nums { display: none; }
+  #btn-cover { display: none; }
+}
 </style>
 </head>
 <body>
@@ -1192,16 +1278,10 @@ body.dark-sheet .script-line:focus { background: rgba(184,149,74,.06); }
   <div class="modal">
     <h2>Portada del guion</h2>
     <div class="form-group">
-      <label>Titulo</label>
-      <input type="text" id="cv-titulo" placeholder="Titulo del guion" autocomplete="off"/>
-    </div>
-    <div class="form-group">
-      <label>Autor(es)</label>
-      <input type="text" id="cv-autor" placeholder="Nombre del autor" autocomplete="off"/>
-    </div>
-    <div class="form-group">
-      <label>Basado en (opcional)</label>
-      <input type="text" id="cv-basado" placeholder="Basado en la novela de..." autocomplete="off"/>
+      <label>Editar en portada</label>
+      <div style="font-size:12px; color:var(--text-dim); line-height:1.5;">
+        Título, autor(es) y “basado en” se editan directamente en la hoja de portada.
+      </div>
     </div>
     <div class="form-group">
       <label>Contacto (direccion, telefono, email)</label>
@@ -1569,7 +1649,7 @@ function repaginate() {
   newPage();
 
   for (let i = 0; i < allParas.length; i++) {
-    const para = allParas[i];
+    let para = allParas[i];
 
     /* Salto de pagina manual */
     if (para.dataset.tipo === '__pagebreak__') {
@@ -1578,74 +1658,61 @@ function repaginate() {
       continue;
     }
 
-    const tipo  = para.dataset.tipo;
-    const netH  = netHMap.get(para) || LINE_H;
-    const mt    = (curH === 0) ? 0 : (MARGIN_TOP_PX[tipo] || 0);
-    const needed = netH + mt;
+    while (para) {
+      const tipo   = para.dataset.tipo;
+      const netH   = netHMap.get(para) || LINE_H;
+      const mt     = (curH === 0) ? 0 : (MARGIN_TOP_PX[tipo] || 0);
+      const needed = mt + netH;
 
-    if (curH === 0) {
-      /* Pagina vacia: colocar el parrafo aunque sea muy largo */
-      if (netH <= CONTENT_H) {
+      /* Cabe completa en la página actual */
+      if (curH + needed <= CONTENT_H) {
         curContent.appendChild(para);
-        curH = netH;
-      } else {
-        /* Parrafo mas largo que una pagina completa: intentar partir */
-        const maxLines = Math.floor(CONTENT_H / LINE_H);
-        const second = splitParagraph(para, maxLines, pool);
-        if (second) {
-          second.dataset.id = second.dataset.id || uid();
-          allParas.splice(i + 1, 0, second);
-          pool.appendChild(second);
-          netHMap.set(second, paraNetHeight(second));
-          netHMap.set(para, Math.min(paraNetHeight(para), CONTENT_H));
-        }
-        curContent.appendChild(para);
-        curH = Math.min(netHMap.get(para) || CONTENT_H, CONTENT_H);
+        curH += needed;
+        break;
       }
-    } else if (curH + needed <= CONTENT_H) {
-      /* Cabe en la pagina actual */
-      curContent.appendChild(para);
-      curH += needed;
-    } else {
-      /* No cabe: intentar partir lo que queda en la pagina actual */
-      const availH    = CONTENT_H - curH - mt;
-      const availLines = Math.floor(availH / LINE_H);
-      let placed = false;
 
-      if (availLines >= 1 && netH > availH) {
+      /* Intentar partirla para aprovechar el espacio restante en esta página */
+      const availH     = CONTENT_H - curH - mt;
+      const availLines = Math.floor(availH / LINE_H);
+
+      if (curH > 0 && availLines >= 1) {
         const second = splitParagraph(para, availLines, pool);
         if (second) {
           second.dataset.id = second.dataset.id || uid();
           allParas.splice(i + 1, 0, second);
           pool.appendChild(second);
           void pool.offsetHeight;
-          netHMap.set(second, paraNetHeight(second));
           netHMap.set(para, paraNetHeight(para));
+          netHMap.set(second, paraNetHeight(second));
           curContent.appendChild(para);
           curH = CONTENT_H;
-          placed = true;
+          break;
         }
       }
 
-      if (!placed) {
-        /* Abrir nueva pagina */
+      /* Si la página ya tiene contenido, abrir una nueva página y reintentar */
+      if (curH > 0) {
         newPage();
-        if (netH > CONTENT_H) {
-          /* Todavia muy largo: partir para la nueva pagina */
-          const maxLines = Math.floor(CONTENT_H / LINE_H);
-          const second = splitParagraph(para, maxLines, pool);
-          if (second) {
-            second.dataset.id = second.dataset.id || uid();
-            allParas.splice(i + 1, 0, second);
-            pool.appendChild(second);
-            void pool.offsetHeight;
-            netHMap.set(second, paraNetHeight(second));
-            netHMap.set(para, paraNetHeight(para));
-          }
-        }
-        curContent.appendChild(para);
-        curH = Math.min(netHMap.get(para) || netH, CONTENT_H);
+        continue;
       }
+
+      /* Página vacía: si aun así no cabe, partirla para que continúe en la siguiente */
+      const maxLines = Math.floor(CONTENT_H / LINE_H);
+      if (netH > CONTENT_H) {
+        const second = splitParagraph(para, maxLines, pool);
+        if (second) {
+          second.dataset.id = second.dataset.id || uid();
+          allParas.splice(i + 1, 0, second);
+          pool.appendChild(second);
+          void pool.offsetHeight;
+          netHMap.set(para, paraNetHeight(para));
+          netHMap.set(second, paraNetHeight(second));
+        }
+      }
+
+      curContent.appendChild(para);
+      curH = Math.min(netHMap.get(para) || netH, CONTENT_H);
+      break;
     }
   }
 
@@ -1673,8 +1740,11 @@ function repaginate() {
   refreshParagraphStates(container);
   updatePrimaryPreviewLine();
   updateSceneNumbers();
+  applyPageScale();
 }
 
+/* ============================================================
+   6. AUTENTICACION
 /* ============================================================
    6. AUTENTICACION
    ============================================================ */
@@ -1958,6 +2028,8 @@ function serializeEditor() {
     /* Clonar para no modificar el DOM; excluir los badges de numeracion */
     const clone = div.cloneNode(true);
     clone.querySelectorAll('.scene-num').forEach(s => s.remove());
+    /* Eliminar tambien el atributo data-scene-num (numero renderizado via CSS) */
+    delete clone.dataset.sceneNum;
     paras.push({ id: div.dataset.id, tipo: div.dataset.tipo, html: clone.innerHTML });
   });
   return paras;
@@ -2491,47 +2563,94 @@ function findDomPosition(root, charOffset) {
   return walk(root);
 }
 
-function splitParagraph(para, maxLines, pool) {
-  if (!pool) pool = $('para-pool');
-  const tipo = para.dataset.tipo;
-  const cpl  = CHARS_PER_LINE[tipo] || 60;
-  const text = para.textContent || '';
-  if (!text.trim()) return null;
+function measureParagraphHeight(para, pool) {
+  const meas = para.cloneNode(true);
+  meas.style.position = 'absolute';
+  meas.style.left = '-99999px';
+  meas.style.top = '0';
+  meas.style.visibility = 'hidden';
+  meas.style.pointerEvents = 'none';
+  pool.appendChild(meas);
+  void meas.offsetHeight;
+  const h = Math.max(meas.offsetHeight || LINE_H, LINE_H);
+  meas.remove();
+  return h;
+}
 
-  /* Simular word-wrap para encontrar offset de caracter donde terminan maxLines */
-  const words = text.split(/\s+/).filter(w => w.length > 0);
-  let lines = 1, lineLen = 0, charPos = 0, splitCharPos = -1;
-  /* Reconstruir texto caracter a caracter para rastrear posicion exacta */
-  let wi = 0, textIdx = 0;
+function measureParagraphPrefixHeight(para, charOffset, pool) {
+  const meas = para.cloneNode(true);
+  const pos = findDomPosition(meas, charOffset);
+  if (!pos) return Infinity;
 
-  while (textIdx <= text.length && wi < words.length) {
-    /* Avanzar hasta la siguiente palabra */
-    while (textIdx < text.length && /\s/.test(text[textIdx])) textIdx++;
-    if (textIdx >= text.length) break;
-    const word = words[wi];
-    if (lineLen === 0) {
-      lineLen = word.length;
-    } else if (lineLen + 1 + word.length > cpl) {
-      lines++;
-      if (lines > maxLines) {
-        splitCharPos = textIdx;
-        break;
-      }
-      lineLen = word.length;
+  try {
+    const range = document.createRange();
+    range.setStart(pos.node, pos.offset);
+    if (meas.lastChild) {
+      range.setEndAfter(meas.lastChild);
     } else {
-      lineLen += 1 + word.length;
+      range.setEnd(meas, meas.childNodes.length);
     }
-    textIdx += word.length;
-    wi++;
+    range.deleteContents();
+
+    meas.style.position = 'absolute';
+    meas.style.left = '-99999px';
+    meas.style.top = '0';
+    meas.style.visibility = 'hidden';
+    meas.style.pointerEvents = 'none';
+
+    pool.appendChild(meas);
+    void meas.offsetHeight;
+    const h = Math.max(meas.offsetHeight || LINE_H, LINE_H);
+    meas.remove();
+    return h;
+  } catch (_) {
+    meas.remove();
+    return Infinity;
+  }
+}
+
+function findBestSplitOffset(para, maxHeight, pool) {
+  const text = para.textContent || '';
+  if (text.length < 2) return -1;
+
+  let low = 1;
+  let high = text.length - 1;
+  let best = -1;
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const h = measureParagraphPrefixHeight(para, mid, pool);
+    if (h <= maxHeight) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
   }
 
-  if (splitCharPos < 0) return null; /* Cabe en maxLines */
+  if (best < 1) return -1;
 
-  /* Buscar posicion en el DOM */
+  /* Evitar cortar una palabra cuando haya espacio para retroceder */
+  while (best > 1 && best < text.length && /\S/.test(text[best - 1]) && /\S/.test(text[best])) {
+    best--;
+  }
+
+  if (best >= text.length) return -1;
+  return best;
+}
+
+function splitParagraph(para, maxLines, pool) {
+  if (!pool) pool = $('para-pool');
+  const maxHeight = Math.max(1, maxLines) * LINE_H;
+  const totalHeight = measureParagraphHeight(para, pool);
+  if (totalHeight <= maxHeight) return null;
+
+  const splitCharPos = findBestSplitOffset(para, maxHeight, pool);
+  if (splitCharPos < 1) return null;
+
   const pos = findDomPosition(para, splitCharPos);
   if (!pos) return null;
 
-  /* Extraer la segunda parte usando Range */
   try {
     const afterRange = document.createRange();
     afterRange.setStart(pos.node, pos.offset);
@@ -2542,13 +2661,20 @@ function splitParagraph(para, maxLines, pool) {
     }
     const frag = afterRange.extractContents();
 
-    /* Quitar espacios iniciales del fragmento */
     if (frag.firstChild && frag.firstChild.nodeType === Node.TEXT_NODE) {
       frag.firstChild.textContent = frag.firstChild.textContent.trimStart();
     }
 
-    const newPara = createParaDiv(tipo, uid());
+    const newPara = createParaDiv(para.dataset.tipo, uid());
     newPara.appendChild(frag);
+
+    /* Marcar la continuidad para mantener el mismo conjunto lógico */
+    const splitGroupId = para.dataset.splitGroupId || para.dataset.id || uid();
+    para.dataset.splitGroupId = splitGroupId;
+    newPara.dataset.splitGroupId = splitGroupId;
+    newPara.dataset.splitFrom = para.dataset.id || splitGroupId;
+    newPara.dataset.splitContinuation = 'true';
+
     return newPara;
   } catch(_) {
     return null;
@@ -2557,27 +2683,61 @@ function splitParagraph(para, maxLines, pool) {
 
 /* ============================================================
    15. NUMERACION DE ESCENAS
+/* ============================================================
+   15. NUMERACION DE ESCENAS
    ============================================================ */
 function updateSceneNumbers() {
-  /* Limpiar numeros anteriores */
-  document.querySelectorAll('.scene-num').forEach(n => n.remove());
+  /* Limpiar numeros anteriores: eliminar el atributo data-scene-num.
+     El número se renderiza via CSS ::after, fuera del DOM editable,
+     por lo que el cursor nunca puede entrar en él ni escribir sobre él. */
+  document.querySelectorAll('.script-line[data-tipo="escena"]').forEach(div => {
+    delete div.dataset.sceneNum;
+  });
   if (!state.sceneNumbers) return;
 
   let n = 0;
   document.querySelectorAll('.script-line[data-tipo="escena"]').forEach(div => {
-    n++; /* La primera escena siempre es 1 */
-    const badge = el('span', { className: 'scene-num' });
-    badge.textContent = n;
-    /* Asegurarse de que el padre tiene position:relative (el CSS ya lo define,
-       pero ponemos inline tambien como fallback) */
-    div.style.position = 'relative';
-    div.appendChild(badge);
+    n++;
+    div.dataset.sceneNum = n; /* CSS usa content: attr(data-scene-num) */
   });
 }
 
 /* ============================================================
-   16. PORTADA (construir en el DOM)
+   15b. ESCALA DE PÁGINAS EN MÓVIL
    ============================================================ */
+function isMobile() {
+  return window.innerWidth < 860;
+}
+
+/* Escala #pages-container para que encaje en el viewport móvil.
+   Usa transform:scale() — visualmente correcto, sin alterar la lógica
+   de paginación (que trabaja siempre con las dimensiones WGA reales). */
+function applyPageScale() {
+  const container = $('pages-container');
+  if (!container) return;
+
+  const vpW  = window.innerWidth;
+  const scale = Math.min(1, vpW / 816);
+
+  if (scale >= 1) {
+    container.style.transform  = '';
+    container.style.marginBottom = '';
+    return;
+  }
+
+  container.style.transform       = 'scale(' + scale + ')';
+  container.style.transformOrigin = 'top center';
+
+  /* transform:scale no afecta el layout, así que el contenedor sigue
+     ocupando su alto real dejando espacio vacío debajo.
+     Compensamos con un margen negativo equivalente al alto que "se encoge". */
+  requestAnimationFrame(() => {
+    const h = container.offsetHeight;
+    if (h > 0) container.style.marginBottom = Math.round(h * (scale - 1)) + 'px';
+  });
+}
+
+
 function buildAndInsertCoverPage() {
   const existing = $('cover-page');
   if (existing) return;
@@ -3081,7 +3241,25 @@ function positionFormatPopup(line) {
   const popup = $('fmt-popup');
   if (!popup) return;
 
-  /* Horizontal: necesitamos la hoja para saber dónde está el borde izquierdo */
+  /* ── MÓVIL: barra horizontal centrada, sobre el teclado virtual ── */
+  if (isMobile()) {
+    /* visualViewport.height descuenta la altura del teclado virtual */
+    const vpH  = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    const vpW  = window.innerWidth;
+    const popW = popup.offsetWidth  || 290;
+    const popH = popup.offsetHeight || 54;
+    const STATUSBAR_H = 26;
+    const margin = 10;
+
+    const top  = Math.max(50, vpH - popH - STATUSBAR_H - margin);
+    const left = Math.max(6, Math.round((vpW - popW) / 2));
+
+    popup.style.top  = top  + 'px';
+    popup.style.left = left + 'px';
+    return;
+  }
+
+  /* ── ESCRITORIO: lógica original ── */
   const page = line ? line.closest('.page') : document.querySelector('.page');
   if (!page) return;
 
@@ -3302,13 +3480,21 @@ function showCaseMenu() {
   const menuH   = menu.offsetHeight || 180;
   const menuW   = menu.offsetWidth  || 240;
 
-  let top  = popRect.top;
-  let left = popRect.right + 8;
+  let top, left;
 
-  if (top  + menuH > vpH - 8) top  = vpH - menuH - 8;
-  if (top  < 8)                top  = 8;
-  if (left + menuW > vpW - 8)  left = vpW - menuW - 8;
-  if (left < 4)                left = 4;
+  if (isMobile()) {
+    /* En móvil: encima del popup, centrado */
+    top  = popRect.top - menuH - 8;
+    left = Math.max(6, Math.round((vpW - menuW) / 2));
+    if (top < 8) top = popRect.bottom + 8; /* si no cabe arriba, debajo */
+  } else {
+    top  = popRect.top;
+    left = popRect.right + 8;
+    if (top  + menuH > vpH - 8) top  = vpH - menuH - 8;
+    if (top  < 8)                top  = 8;
+    if (left + menuW > vpW - 8)  left = vpW - menuW - 8;
+    if (left < 4)                left = 4;
+  }
 
   menu.style.top  = top  + 'px';
   menu.style.left = left + 'px';
@@ -3337,13 +3523,20 @@ function showTextPalette() {
   const palH    = palette.offsetHeight || 120;
   const palW    = palette.offsetWidth  || 248;
 
-  let top  = popRect.top;
-  let left = popRect.right + 8;
+  let top, left;
 
-  if (top + palH > vpH - 8) top = vpH - palH - 8;
-  if (top < 8) top = 8;
-  if (left + palW > vpW - 8) left = vpW - palW - 8;
-  if (left < 4) left = 4;
+  if (isMobile()) {
+    top  = popRect.top - palH - 8;
+    left = Math.max(6, Math.round((vpW - palW) / 2));
+    if (top < 8) top = popRect.bottom + 8;
+  } else {
+    top  = popRect.top;
+    left = popRect.right + 8;
+    if (top + palH > vpH - 8) top = vpH - palH - 8;
+    if (top < 8) top = 8;
+    if (left + palW > vpW - 8) left = vpW - palW - 8;
+    if (left < 4) left = 4;
+  }
 
   palette.style.top  = top  + 'px';
   palette.style.left = left + 'px';
@@ -3369,14 +3562,21 @@ function showHlPalette() {
   const palH    = palette.offsetHeight || 130;
   const palW    = palette.offsetWidth  || 140;
 
-  /* A la DERECHA del popup (entre la barra y la hoja), 8px de separacion */
-  let top  = popRect.top;
-  let left = popRect.right + 8;
+  let top, left;
 
-  if (top + palH > vpH - 8) top = vpH - palH - 8;
-  if (top < 8) top = 8;
-  if (left + palW > vpW - 8) left = vpW - palW - 8;
-  if (left < 4) left = 4;
+  if (isMobile()) {
+    top  = popRect.top - palH - 8;
+    left = Math.max(6, Math.round((vpW - palW) / 2));
+    if (top < 8) top = popRect.bottom + 8;
+  } else {
+    /* A la DERECHA del popup (entre la barra y la hoja), 8px de separacion */
+    top  = popRect.top;
+    left = popRect.right + 8;
+    if (top + palH > vpH - 8) top = vpH - palH - 8;
+    if (top < 8) top = 8;
+    if (left + palW > vpW - 8) left = vpW - palW - 8;
+    if (left < 4) left = 4;
+  }
 
   palette.style.top  = top  + 'px';
   palette.style.left = left + 'px';
@@ -3854,6 +4054,25 @@ function bindUIEvents() {
   /* scroll: no reposicionar el popup (es fixed y centrado en viewport)
      resize: sí reposicionar para corregir el left horizontal */
   window.addEventListener('resize', syncFormatUI, { passive: true });
+  window.addEventListener('resize', applyPageScale, { passive: true });
+
+  /* Teclado virtual en móvil: reposicionar el popup cuando el teclado
+     aparece o desaparece (visualViewport.height cambia). */
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      applyPageScale();
+      refreshFormatPopup();
+    }, { passive: true });
+    window.visualViewport.addEventListener('scroll', () => {
+      if (isMobile()) refreshFormatPopup();
+    }, { passive: true });
+  }
+
+  /* En móvil, touchstart en el popup previene que el tap en un botón de
+     formato haga blur del script-line activo (mirror del mousedown en desktop). */
+  $('fmt-popup')?.addEventListener('touchstart', e => {
+    e.preventDefault();
+  }, { passive: false });
 
   /* Inicializar preview del selector de color */
   if ($('color-text-input')) {
@@ -3878,9 +4097,36 @@ function bindUIEvents() {
    25. MODAL DE PORTADA
    ============================================================ */
 function openCoverModal() {
-  $('cv-titulo'  ).value   = state.cover.titulo     || '';
-  $('cv-autor'   ).value   = state.cover.autor      || '';
-  $('cv-basado'  ).value   = state.cover.basado     || '';
+  $('cv-contacto').value   = state.cover.contacto   || '';
+  $('cv-registro').value   = state.cover.registroWGA|| '';
+  $('cv-mostrar' ).checked = state.showCover;
+  $('cover-modal').classList.add('open');
+}
+
+function cleanupCoverHelperText() {
+  const coverModal = $('cover-modal');
+  if (!coverModal) return;
+
+  const unwanted = [
+    'Editar en portada',
+    'Título, autor(es) y “basado en” se editan directamente en la hoja de portada.',
+    'Título, autor(es) y "basado en" se editan directamente en la hoja de portada.'
+  ];
+
+  const walker = document.createTreeWalker(coverModal, NodeFilter.SHOW_ELEMENT, null);
+  const toRemove = [];
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const text = (node.textContent || '').trim().replace(/\s+/g, ' ');
+    if (unwanted.includes(text)) toRemove.push(node);
+  }
+  toRemove.forEach(node => {
+    if (node.parentNode) node.parentNode.removeChild(node);
+  });
+}
+
+function openCoverModal() {
+  cleanupCoverHelperText();
   $('cv-contacto').value   = state.cover.contacto   || '';
   $('cv-registro').value   = state.cover.registroWGA|| '';
   $('cv-mostrar' ).checked = state.showCover;
@@ -3888,9 +4134,6 @@ function openCoverModal() {
 }
 
 function saveCoverModal() {
-  state.cover.titulo      = $('cv-titulo'  ).value.trim();
-  state.cover.autor       = $('cv-autor'   ).value.trim();
-  state.cover.basado      = $('cv-basado'  ).value.trim();
   state.cover.contacto    = $('cv-contacto').value.trim();
   state.cover.registroWGA = $('cv-registro').value.trim();
   state.showCover         = $('cv-mostrar' ).checked;
@@ -3908,7 +4151,6 @@ function saveCoverModal() {
     if (coverPage) coverPage.style.display = 'none';
   }
   repaginate();
-  scheduleSave();
 }
 
 /* ============================================================
@@ -3916,6 +4158,8 @@ function saveCoverModal() {
    ============================================================ */
 function init() {
   bindUIEvents();
+  cleanupCoverHelperText();
+  applyPageScale(); /* Escala inicial para móvil */
 
   /* Advertencia si el archivo se esta abriendo como file:// */
   if (window.location.protocol === 'file:') {
